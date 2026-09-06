@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ana · Brain</title>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --surface-2: #fbfbfc;
+    --border: #e6e8eb;
+    --border-strong: #d5d9de;
+    --ink: #1a1d21;
+    --dim: #565e66;
+    --faint: #8a929b;
+    --accent: #e0784e;
+    --accent-ink: #b85c33;
+    --accent-soft: #fdf1ea;
+    --radius: 10px;
+    --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: "Cascadia Code", Consolas, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--font); font-size:14px; line-height:1.55; overflow:hidden; }
+  ::selection { background:rgba(224,120,78,.2); }
+  .app { display:flex; height:100vh; }
+
+  /* ===== Sidebar ===== */
+  .side { width:236px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; }
+  .brand { display:flex; align-items:center; gap:10px; padding:20px 18px 16px; }
+  .mark { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,#e0784e,#c95f37); display:grid; place-items:center; color:#fff; font-weight:700; font-size:13px; box-shadow:0 2px 6px rgba(224,120,78,.3); }
+  .brand .nm { font-weight:650; font-size:14px; letter-spacing:.1px; }
+  .brand .sb { font-size:11px; color:var(--faint); }
+  .nav { padding:6px 10px 10px; flex:1; overflow-y:auto; }
+  .nav .grp, .nav .nav-group { font-size:10.5px; text-transform:uppercase; letter-spacing:1.3px; color:var(--faint); padding:14px 10px 5px; }
+  .nav a { display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:7px; color:var(--dim); font-size:13.5px; text-decoration:none; margin-bottom:1px; font-weight:450; }
+  .nav a:hover { background:#f3f4f6; color:var(--ink); }
+  .nav a.on { background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
+  .nav a .cnt { margin-left:auto; font-size:11px; color:var(--faint); font-family:var(--mono); }
+  .nav a.on .cnt { color:var(--accent-ink); }
+  .side-foot { border-top:1px solid var(--border); padding:12px 16px; font-size:11.5px; color:var(--faint); display:flex; align-items:center; gap:7px; }
+  .live { width:7px; height:7px; border-radius:50%; background:#3daf6f; }
+
+  /* ===== Main ===== */
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .bar { height:54px; border-bottom:1px solid var(--border); background:var(--surface); display:flex; align-items:center; padding:0 26px; gap:10px; }
+  .bar h1 { font-size:15px; font-weight:600; }
+  .bar .crumb { color:var(--faint); font-size:12.5px; }
+  .bar .grow { flex:1; }
+  .search { display:flex; align-items:center; gap:7px; background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:5px 12px; width:220px; color:var(--faint); font-size:12px; }
+  .search input { border:none; outline:none; background:none; font-size:13px; width:100%; color:var(--ink); font-family:var(--font); }
+  .search input::placeholder { color:var(--faint); }
+
+  .body { flex:1; overflow-y:auto; padding:30px 34px 80px; }
+  .wrap { max-width:1280px; margin:0 auto; padding:0 8px; }
+
+  /* ===== Dokumen (Brain home) ===== */
+  .pt { font-size:22px; font-weight:700; letter-spacing:-.3px; }
+  .pd { color:var(--dim); font-size:13.5px; margin:5px 0 24px; }
+  .doclist { display:flex; flex-direction:column; gap:2px; }
+  .doc { display:flex; align-items:center; gap:14px; padding:15px 14px; border:1px solid transparent; border-radius:9px; cursor:pointer; transition:background .12s; }
+  .doc:hover { background:var(--surface); border-color:var(--border); box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .doc .ic { width:38px; height:38px; border-radius:9px; display:grid; place-items:center; font-size:15px; flex-shrink:0; }
+  .ic.soul { background:#fdf0e6; } .ic.memory { background:#e9f3ea; } .ic.user { background:#e8f0fb; }
+  .doc .nm { font-size:14.5px; font-weight:600; }
+  .doc .ds { font-size:12.5px; color:var(--dim); }
+  .doc .meta { margin-left:auto; text-align:right; color:var(--faint); font-size:11px; font-family:var(--mono); flex-shrink:0; }
+  .doc .arr { color:#c3c9cf; font-size:16px; margin-left:4px; }
+
+  .h2 { font-size:16px; font-weight:650; margin:30px 0 4px; }
+  .h2sub { color:var(--dim); font-size:13px; margin-bottom:12px; }
+
+  /* ===== Skills ===== */
+  .skgroup { margin-bottom:18px; }
+  .skhead { font-size:11px; text-transform:uppercase; letter-spacing:1.1px; color:var(--faint); padding:0 8px; margin-bottom:2px; }
+  .sk { display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:7px; cursor:pointer; }
+  .sk:hover { background:var(--surface); }
+  .sk .sn { font-family:var(--mono); font-size:12.5px; width:185px; flex-shrink:0; font-weight:500; }
+  .sk .sd { color:var(--dim); font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .none { color:var(--faint); text-align:center; padding:24px; font-size:13px; }
+
+  /* ===== Chat ===== */
+  .chatwrap { max-width:760px; margin:0 auto; display:flex; flex-direction:column; height:calc(100vh - 150px); }
+  .chatbox { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:14px; padding:6px 4px 16px; }
+  .bubble { max-width:85%; padding:10px 15px; border-radius:14px; font-size:13.5px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
+  .bubble.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
+  .bubble.ana { align-self:flex-start; background:var(--surface); border:1px solid var(--border); border-bottom-left-radius:4px; }
+  .bubble .who { font-size:10.5px; color:var(--faint); margin-bottom:3px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; }
+  .bubble.ana .who { color:var(--accent-ink); }
+  .bubble.typing { color:var(--faint); font-style:italic; }
+  .chatinput { display:flex; gap:8px; padding:10px 0 0; border-top:1px solid var(--border); }
+  .chatinput textarea { flex:1; resize:none; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--ink); font-family:var(--font); font-size:13.5px; padding:10px 14px; outline:none; min-height:44px; max-height:120px; }
+  .chatinput textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(224,120,78,.12); }
+  .chatinput button { border:none; border-radius:10px; background:var(--accent); color:#fff; font-size:13px; font-weight:600; padding:0 20px; cursor:pointer; font-family:var(--font); }
+  .chatinput button:hover { background:#c95f37; }
+  .chatinput button:disabled { opacity:.5; cursor:wait; }
+
+  /* ===== Meta Ads ===== */
+  .statgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:18px 0 26px; }
+  .statcard { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+  .statcard .lb { font-size:11px; color:var(--faint); text-transform:uppercase; letter-spacing:.8px; }
+  .statcard .vl { font-size:22px; font-weight:700; margin-top:5px; letter-spacing:-.3px; }
+  .statcard .sb { font-size:11.5px; color:var(--dim); margin-top:2px; }
+  .statcard.accent { background:var(--accent-soft); border-color:rgba(224,120,78,.3); }
+  .tablewrap { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:14px; }
+  .tablewrap .thead { padding:13px 18px; border-bottom:1px solid var(--border); font-weight:600; font-size:13.5px; display:flex; align-items:center; gap:8px; }
+  .tablewrap .thead .grow { flex:1; }
+  .tablewrap .badge { font-size:10.5px; padding:2px 8px; border-radius:20px; font-weight:600; }
+  .badge.active { background:rgba(61,175,111,.15); color:#2d8f57; }
+  .badge.paused { background:rgba(200,150,80,.15); color:#a67c2d; }
+  table.mt { width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.mt th { text-align:left; padding:9px 18px; font-size:10.5px; text-transform:uppercase; letter-spacing:.7px; color:var(--faint); border-bottom:1px solid var(--border); background:var(--surface-2); font-weight:600; }
+  table.mt td { padding:11px 18px; border-bottom:1px solid #f0f1f3; }
+  table.mt tr:last-child td { border-bottom:none; }
+  table.mt tr.click { cursor:pointer; }
+  table.mt tr.click:hover td { background:#faf7f4; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .nm2 { font-weight:600; font-size:12.5px; }
+  .sub2 { color:var(--faint); font-size:11px; }
+  .drill { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 16px; margin-bottom:10px; cursor:pointer; }
+  .drill:hover { border-color:var(--accent); }
+  .drill .dn { font-weight:600; font-size:13px; }
+  .drill .dm { color:var(--dim); font-size:12px; margin-top:2px; display:flex; gap:14px; flex-wrap:wrap; }
+  .refresh { border:1px solid var(--border); background:var(--surface); color:var(--dim); border-radius:7px; padding:4px 12px; font-size:12px; cursor:pointer; font-family:var(--font); }
+  .refresh:hover { color:var(--ink); border-color:var(--border-strong); }
+  .dte { border:1px solid var(--border); border-radius:7px; padding:5px 9px; font-size:12.5px; background:var(--surface); color:var(--ink); font-family:var(--font); }
+  .muted { color:var(--faint); font-size:12px; }
+
+  /* ===== Detail ===== */
+  .back { display:inline-flex; align-items:center; gap:6px; color:var(--dim); font-size:13px; cursor:pointer; padding:4px 8px; border-radius:6px; margin-bottom:14px; }
+  .back:hover { background:var(--border); color:var(--ink); }
+  .dt { font-size:20px; font-weight:700; letter-spacing:-.2px; }
+  .ds2 { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin:3px 0 16px; }
+  pre.code { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px 22px; font-family:var(--mono); font-size:12.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; overflow-x:auto; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+  pre.code::before { content:attr(data-file); display:block; font-family:var(--font); font-size:11px; color:var(--faint); border-bottom:1px solid var(--border); padding-bottom:10px; margin-bottom:14px; }
+
+  /* ===== Mascot — light ===== */
+  .mascot { position:fixed; z-index:999; right:24px; bottom:24px; width:62px; height:62px; cursor:grab; user-select:none; }
+  .mascot:active { cursor:grabbing; }
+  .mascot .head { position:absolute; inset:0; border-radius:50%; background:radial-gradient(circle at 35% 28%, #fff, #f1e8df); border:1.5px solid #e5d8cc; box-shadow:0 8px 22px rgba(120,90,60,.18); overflow:hidden; display:grid; place-items:center; }
+  .mascot .hair { position:absolute; top:1px; left:50%; transform:translateX(-50%); width:46px; height:26px; background:radial-gradient(ellipse at 50% 20%, #4a3a2e, #33261c); border-radius:50% 50% 42% 42%; }
+  .mascot .eyes { position:absolute; top:25px; left:50%; transform:translateX(-50%); display:flex; gap:12px; }
+  .mascot .eye { width:4px; height:5px; background:#33261c; border-radius:50%; }
+  .mascot .smile { position:absolute; top:36px; left:50%; transform:translateX(-50%); width:10px; height:5px; border-bottom:1.6px solid #33261c; border-radius:0 0 9px 9px; }
+  .mascot .ring { position:absolute; right:-3px; bottom:-3px; width:19px; height:19px; border-radius:50%; border:2.5px solid #fff; background:#3daf6f; display:grid; place-items:center; font-size:8px; color:#fff; }
+  .mascot .tip { position:absolute; bottom:70px; right:0; background:#2a2e33; color:#fff; border-radius:8px 8px 2px 8px; padding:5px 10px; font-size:11px; white-space:nowrap; opacity:0; transform:translateY(4px); transition:all .22s; pointer-events:none; }
+  .mascot:hover .tip { opacity:1; transform:translateY(0); }
+  .mascot.busy .head { animation:bob 1.3s ease-in-out infinite; }
+  .mascot.busy .ring { background:#e0784e; }
+  @keyframes bob { 0%,100%{transform:translateY(0) rotate(0)} 25%{transform:translateY(-3px) rotate(-5deg)} 75%{transform:translateY(0) rotate(4deg)} }
+
+  ::-webkit-scrollbar{width:9px}::-webkit-scrollbar-thumb{background:#d8dce0;border-radius:9px;border:2px solid var(--bg)}::-webkit-scrollbar-thumb:hover{background:#c2c8ce}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><div class="mark">A</div><div><div class="nm">Ana</div><div class="sb">workspace</div></div></div>
+    <nav class="nav" id="nav">
+      <div class="nav-group">Workspace</div>
+      <a href="#brain" data-v="docs" class="on"><span>Brain</span><span class="cnt" id="navBrain">3</span></a>
+      <a href="#chat" data-v="chat"><span>Chat</span><span class="cnt" id="navChatLive" style="display:none">●</span></a>
+      <a href="#meta" data-v="meta"><span>Meta Ads</span></a>
+      <div class="grp" style="display:none"></div>
+      <a href="#skills" data-v="skills"><span>Skills</span><span class="cnt" id="navSkills">0</span></a>
+      <div class="grp">Nanti</div>
+      <a href="#cron" data-v="soon"><span>Cron</span></a>
+      <a href="#tasks" data-v="soon"><span>Tasks</span></a>
+      <a href="#clients" data-v="soon"><span>Clients</span></a>
+    </nav>
+    <div class="side-foot"><span class="live"></span><span id="liveTxt">Ana online</span></div>
+  </aside>
+
+  <div class="main">
+    <div class="bar">
+      <h1 id="t1">Brain</h1><span class="crumb" id="t2"></span>
+      <div class="grow"></div>
+      <div class="search" id="sw" style="display:none"><span>⌕</span><input id="q" placeholder="Cari skill…"></div>
+    </div>
+    <div class="body"><div class="wrap" id="content"><div style="color:var(--faint);padding:40px;text-align:center">Memuat…</div></div></div>
+  </div>
+</div>
+
+<div class="mascot" id="mascot">
+  <div class="head"><div class="hair"></div><div class="eyes"><span class="eye"></span><span class="eye"></span></div><div class="smile"></div></div>
+  <div class="ring" id="mr">✓</div>
+  <div class="tip" id="mt">Ana</div>
+</div>
+
+<script>
+let B=null,S=null;
+const $=id=>document.getElementById(id), esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'), get=async u=>(await fetch(u)).json();
+
+/* nav */
+document.querySelectorAll('#nav a[data-v]').forEach(a=>a.addEventListener('click',e=>{
+  e.preventDefault();
+  document.querySelectorAll('#nav a').forEach(x=>x.classList.remove('on'));
+  a.classList.add('on');
+  ({docs:viewDocs,skills:viewSkills,soon:viewSoon,chat:viewChat,meta:viewMeta})[a.dataset.v]();
+}));
+function setNav(v){document.querySelectorAll('#nav a').forEach(x=>x.classList.toggle('on',x.dataset.v===v));}
+
+/* ===== views ===== */
+function viewDocs(){
+  setNav('docs'); $('t1').textContent='Brain'; $('t2').textContent='';
+  $('sw').style.display='none';
+  let h='<div class="pt">Brain</div><div class="pd">Dokumen teras — identiti, memori & profil Ana.</div><div class="doclist">';
+  for(const f of B.files){
+    const ic=f.id==='soul'?'◈':f.id==='memory'?'≡':'◉';
+    h+=`<div class="doc" onclick="openDoc('${f.id}')"><div class="ic ${f.id}">${ic}</div>
+      <div><div class="nm">${esc(f.name)}</div><div class="ds">${esc(f.desc)}</div></div>
+      <div class="meta">${f.content.split('\n').length} baris<br>${(f.chars/1000).toFixed(1)} KB</div><span class="arr">›</span></div>`;
+  }
+  h+='</div><div class="h2">Skills</div><div class="h2sub">${S.total} prosedur kepakaran — klik untuk baca.</div><div class="skgroup"><div class="sklist">';
+  let n=0;
+  for(const [cat,arr] of Object.entries(S.categories))for(const s of arr){
+    if(n>=25)break;
+    h+=`<div class="sk" onclick="openSkill('${esc(s.name)}')"><span class="sn">${esc(s.name)}</span><span class="sd">${esc(s.desc||'')}</span></div>`;n++;
+  }
+  h+=`</div></div>${S.total>25?'<div style="color:var(--faint);font-size:12.5px;padding:6px 12px">… dan '+(S.total-25)+' lagi — buka Skills untuk semua.</div>':''}</div>`;
+  $('content').innerHTML=h;
+}
+function viewSkills(){
+  setNav('skills'); $('t1').textContent='Skills'; $('t2').textContent='';
+  $('sw').style.display='flex'; $('q').value=''; listSkills('');
+}
+function listSkills(q){
+  q=q.trim().toLowerCase(); let h='',shown=0;
+  for(const [cat,arr] of Object.entries(S.categories)){
+    const f=arr.filter(s=>!q||s.name.toLowerCase().includes(q)||(s.desc||'').toLowerCase().includes(q));
+    if(!f.length)continue;
+    h+=`<div class="skgroup"><div class="skhead">${esc(cat.replace(/-/g,' '))} · ${f.length}</div>`;
+    for(const s of f)h+=`<div class="sk" onclick="openSkill('${esc(s.name)}')"><span class="sn">${esc(s.name)}</span><span class="sd">${esc(s.desc||'')}</span></div>`,shown++;
+    h+='</div>';
+  }
+  $('content').innerHTML=`<div class="pt">Skills</div><div class="pd">${shown} prosedur ditemui.</div>${h||'<div class="none">Tiada skill sepadan</div>'}`;
+}
+$('q').addEventListener('input',e=>listSkills(e.target.value));
+function viewSoon(){ $('sw').style.display='none'; $('content').innerHTML='<div style="padding:60px 20px;text-align:center"><div style="font-size:40px;margin-bottom:14px">🚧</div><div style="font-weight:600;font-size:16px">Nanti dulu</div><div style="color:var(--faint);font-size:13px;margin-top:4px">Page ni akan datang — fokus Brain & Skills dulu.</div></div>'; }
+
+/* detail */
+async function openDoc(id){const f=B.files.find(x=>x.id===id);$('t1').textContent=f.name;$('t2').textContent='Brain';$('sw').style.display='none';
+  $('content').innerHTML=`<div class="back" onclick="viewDocs()">← Brain</div><div class="dt">${esc(f.name)}</div><div class="ds2">${esc(f.desc)}</div><pre class="code" data-file="${esc(f.name)}">${esc(f.content)}</pre>`;}
+async function openSkill(nm){$('t1').textContent=nm;$('t2').textContent='Skills';$('sw').style.display='none';
+  $('content').innerHTML='<div style="color:var(--faint);padding:30px">Memuat…</div>';
+  const d=await get('/api/skill?name='+encodeURIComponent(nm));
+  $('content').innerHTML=`<div class="back" onclick="viewSkills()">← Skills</div><div class="dt">${esc(d.name)}</div><div class="ds2">SKILL.md</div><pre class="code" data-file="${esc(d.name)} · SKILL.md">${esc(d.content)}</pre>`;}
+
+/* ===== Chat ===== */
+let chatHist = [];
+function viewChat(){
+  setNav('chat'); $('t1').textContent='Chat'; $('t2').textContent='';
+  $('sw').style.display='none';
+  $('content').innerHTML = `
+    <div class="chatwrap">
+      <div class="chatbox" id="chatbox"></div>
+      <div class="chatinput">
+        <textarea id="chatTxt" placeholder="Tanya Ana apa-apa, atau bagi task…" rows="1"></textarea>
+        <button id="chatSend">Hantar</button>
+      </div>
+    </div>`;
+  const box = $('chatbox');
+  for (const m of chatHist) addBubble(m.role, m.text);
+  if (!chatHist.length) addBubble('ana', '👋 Hai! Ini Chat Ana — tanya apa-apa atau bagi task. (Prototaip — setiap mesej sesi baru, macam Telegram /new)');
+  const ta = $('chatTxt'), btn = $('chatSend');
+  const send = () => {
+    const v = ta.value.trim(); if (!v) return;
+    chatHist.push({role:'user', text:v});
+    addBubble('user', v);
+    ta.value=''; autoGrow();
+    btn.disabled=true;
+    addBubble('ana', '…', true);
+    const typingEl = box.lastChild;
+    fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message:v})})
+      .then(r=>r.json()).then(d=>{
+        if (d.worker_id) pollChat(d.worker_id, typingEl);
+        else { typingEl.remove(); addBubble('ana','Error: '+d.error); btn.disabled=false; }
+      }).catch(e=>{ typingEl.remove(); addBubble('ana','Ralat sambungan: '+e); btn.disabled=false; });
+  };
+  btn.addEventListener('click', send);
+  ta.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); }});
+  ta.addEventListener('input', autoGrow);
+  function autoGrow(){ ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,120)+'px'; }
+  box.scrollTop = box.scrollHeight;
+}
+function addBubble(role, text, typing){
+  const box = $('chatbox'); if (!box) return;
+  const d = document.createElement('div');
+  d.className = 'bubble ' + (role==='user' ? 'user' : 'ana') + (typing ? ' typing' : '');
+  d.innerHTML = (role==='user' ? '' : '<div class="who">Ana</div>') + '<span></span>';
+  d.lastChild.textContent = text;
+  box.appendChild(d); box.scrollTop = box.scrollHeight;
+  return d;
+}
+function pollChat(wid, typingEl, tries){
+  tries = tries || 0;
+  if (tries > 120) { typingEl.remove(); addBubble('ana','⏱️ Timeout menunggu jawapan.'); $('chatSend').disabled=false; return; }
+  fetch('/api/chat/status?id='+wid).then(r=>r.json()).then(d=>{
+    if (d.status==='done'){
+      typingEl.remove();
+      const out = cleanAnaOut(d.output || '(tiada output)');
+      chatHist.push({role:'ana', text:out});
+      addBubble('ana', out);
+      $('chatSend').disabled=false;
+    } else {
+      setTimeout(()=>pollChat(wid, typingEl, tries+1), 1500);
+    }
+  }).catch(()=>setTimeout(()=>pollChat(wid, typingEl, tries+1), 2000));
+}
+function cleanAnaOut(s){
+  // buang artifact hermes CLI: header, box border, ANSI, metadata
+  s = s.replace(/\x1b\[[0-9;]*m/g, '');           // ANSI color codes
+  s = s.replace(/[\u2500\u2502\u250c\u2510\u2514\u2518\u2550\u2551\u2552\u2554\u2555\u2556\u2557\u2559\u255a\u255b\u255c\u255d\u255e\u255f\u2560\u2561\u2562\u2563\u2564\u2565\u2566\u2567\u2568\u2569\u256a\u256b\u256c\u2574\u2575\u2576\u2577\u2578\u2579\u257a\u257b\u257c\u257d\u257e\u257f]/g, '');  // box drawing
+  const lines = s.split('\n');
+  const keep = [];
+  for (let i=0;i<lines.length;i++){
+    const t = lines[i].trim();
+    if (!t) { keep.push(''); continue; }
+    if (/^(Query:|Initializing agent|Resume this session|Session:|Title:|Duration:|Messages:|model=|provider=|hermes -c|hermes --resume|─{5,}|⚕)/i.test(t)) continue;
+    // buang baris yang hanya box chars
+    if (/^[─│╭╮╰╯\s]*$/.test(t)) continue;
+    keep.push(t);
+  }
+  let out = keep.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return out || '(Ana tak beri jawapan teks)';
+}
+
+/* ===== Meta Ads — layout macam pengajar course ===== */
+let dashData = null;
+let metaFrom = '', metaTo = '';
+function viewMeta(){
+  setNav('meta'); $('t1').textContent='Meta Ads'; $('t2').textContent='JFR Auto Ad';
+  $('sw').style.display='none';
+  const now = new Date();
+  metaTo = toDateStr(now);
+  const d0 = new Date(now); d0.setDate(1);
+  metaFrom = toDateStr(d0);
+  $('content').innerHTML = '<div style="color:var(--faint);padding:40px;text-align:center">Memuat data Meta Ads…</div>';
+  loadDash();
+}
+function toDateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtRM(n){ n = n||0; return 'RM' + Number(n).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtN(n){ return Number(n||0).toLocaleString('en-MY'); }
+function pct(n){ n = Number(n||0); return (Math.round(n*1000)/10).toFixed(2)+'%'; }
+function actVal(actions, type){
+  if (!Array.isArray(actions)) return 0;
+  const a = actions.find(x=>x.action_type===type);
+  return a ? Number(a.value||0) : 0;
+}
+async function loadDash(){
+  try{
+    const url = '/api/meta/dash?from='+metaFrom+'&to='+metaTo;
+    const d = await (await fetch(url)).json();
+    if (d.error) throw new Error(d.error);
+    dashData = d;
+    renderDash(d);
+  }catch(e){
+    $('content').innerHTML = '<div style="color:#c0392b;padding:40px;text-align:center">Gagal muat: '+esc(e.message)+'</div>';
+  }
+}
+function computeTotals(d){
+  const camps = (d.tree.campaigns)||[];
+  const rows = (d.insights.data)||[];
+  const T = {spend:0, impr:0, reach:0, clicks:0, linkClicks:0, results:0, freq:0};
+  for (const r of rows){
+    T.spend += Number(r.spend||0);
+    T.impr += Number(r.impressions||0);
+    T.reach += Number(r.reach||0);
+    T.clicks += Number(r.clicks||0);
+    T.linkClicks += Number(r.inline_link_clicks||0);
+    T.results += actVal(r.actions,'onsite_conversion.messaging_conversation_started_7d')
+              || actVal(r.actions,'onsite_conversion.messaging_first_reply');
+  }
+  if (T.impr && T.reach) T.freq = T.impr/T.reach;
+  return T;
+}
+function renderDash(d){
+  const T = computeTotals(d);
+  const fin = d.finance||{};
+  const camps = (d.tree.campaigns)||[];
+  const campRows = (d.insights.data)||[];
+  let h = '<div class="wrap">';
+  // ===== header =====
+  h += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">';
+  h += '<div><div class="pt" style="font-size:17px">Meta Ads</div>';
+  h += '<div class="pd" style="margin:0">'+esc(fin.adAccountId||'')+' · baki '+fmtRM(fin.balance)+' · '+(fin.currency||'MYR')+'</div></div>';
+  h += '<div class="grow" style="flex:1"></div>';
+  h += '<input type="date" id="mFrom" value="'+metaFrom+'" class="dte">';
+  h += '<span style="color:var(--faint)">→</span>';
+  h += '<input type="date" id="mTo" value="'+metaTo+'" class="dte">';
+  h += '<button class="refresh" onclick="applyDates()">Tukar</button>';
+  h += '</div>';
+  // ===== KPI cards =====
+  h += '<div class="statgrid">';
+  h += kpi('Amount Spent', fmtRM(T.spend), 'kos sebenar');
+  h += kpi('Results', fmtN(T.results), T.results?fmtRM(T.spend/T.results)+' / result':'—');
+  h += kpi('CTR (all)', pct(T.clicks&&T.impr?T.clicks*100/T.impr:0), 'klik / 1K paparan');
+  h += kpi('CPM', fmtRM(T.impr?T.spend*1000/T.impr:0), 'kos / 1K impressions');
+  h += kpi('Impressions', fmtN(T.impr), 'dilihat');
+  h += kpi('Reach', fmtN(T.reach), 'orang unik · freq '+T.freq.toFixed(2));
+  h += '</div>';
+  // ===== grid: chart kiri (2/3) + panels kanan (1/3) =====
+  h += '<div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:16px">';
+  // chart
+  h += '<div class="tablewrap"><div class="thead"><span class="grow">📈 Performance Trend</span><span class="muted">spend harian</span></div>';
+  h += '<div style="padding:14px 18px"><svg id="trendChart" viewBox="0 0 600 190" style="width:100%;height:auto;display:block"></svg></div></div>';
+  // panels kanan
+  h += '<div style="display:flex;flex-direction:column;gap:14px">';
+  h += '<div class="tablewrap" style="flex:1"><div class="thead">💰 Budget Health</div><div style="padding:14px 18px">'+budgetHealthHtml(fin, T)+'</div></div>';
+  h += '<div class="tablewrap" style="flex:1"><div class="thead">⚡ Delivery Alerts</div><div style="padding:10px 14px">'+deliveryAlertsHtml(camps)+'</div></div>';
+  h += '</div></div>';
+  // ===== Delivery hierarchy table =====
+  h += '<div class="tablewrap" style="overflow-x:auto"><div class="thead"><span class="grow">🧬 Delivery Hierarchy</span><span class="muted">'+campRows.length+' campaign</span></div>';
+  h += '<table class="mt" style="min-width:1100px"><tr>';
+  const cols = [
+    ['nm','Delivery Hierarchy'],['results','Results'],['cpr','Cost / Result'],['spend','Amount Spent'],
+    ['cpm','CPM'],['impr','Impressions'],['freq','Freq.'],['reach','Reach'],['ctr','CTR (all)'],['lctr','CTR (Link)'],['cpc','CPC (Link)']
+  ];
+  for (const c of cols) h += '<th class="'+(c[0]==='nm'?'':'num')+'">'+c[1]+'</th>';
+  h += '</tr>';
+  // baris campaign + expand adset/ads
+  for (const r of campRows){
+    const cpr = r.results ? Number(r.spend)/r.results : 0;
+    const lcpc = Number(r.inline_link_clicks||0) ? Number(r.spend)/Number(r.inline_link_clicks) : 0;
+    h += '<tr><td><div class="nm2">📢 '+esc(r.campaign_name||'')+'</div><div class="sub2">'+(r.objective||'')+'</div></td>';
+    h += '<td class="num" style="font-weight:600">'+fmtN(r.results)+'</td>';
+    h += '<td class="num">'+fmtRM(cpr)+'</td>';
+    h += '<td class="num">'+fmtRM(r.spend)+'</td>';
+    h += '<td class="num">'+fmtRM(r.cpm)+'</td>';
+    h += '<td class="num">'+fmtN(r.impressions)+'</td>';
+    h += '<td class="num">'+(r.frequency?Number(r.frequency).toFixed(2):'—')+'</td>';
+    h += '<td class="num">'+fmtN(r.reach)+'</td>';
+    h += '<td class="num">'+pct(r.ctr)+'</td>';
+    h += '<td class="num">'+pct(r.inline_link_click_ctr)+'</td>';
+    h += '<td class="num">'+fmtRM(lcpc)+'</td></tr>';
+    // ad set & ads dari tree
+    const campTree = camps.find(c=>c.campaignName===r.campaign_name);
+    if (campTree) for (const as of (campTree.adSets||[])){
+      const am = as.metrics||{};
+      h += '<tr style="background:#faf7f4"><td style="padding-left:38px"><div class="nm2" style="font-weight:500">🎯 '+esc(as.adSetName||'')+'</div><div class="sub2">budget '+fmtRM((as.budget||{}).amount)+'/'+((as.budget||{}).type||'')+' · '+((as.optimizationGoal)||'')+'</div></td>';
+      h += '<td class="num">'+fmtN(actVal(am.actions,'onsite_conversion.messaging_conversation_started_7d'))+'</td>';
+      h += '<td class="num"></td><td class="num">'+fmtRM(am.spend)+'</td><td class="num">'+fmtRM(am.cpm)+'</td>';
+      h += '<td class="num">'+fmtN(am.impressions)+'</td><td class="num"></td><td class="num">'+fmtN(am.reach)+'</td>';
+      h += '<td class="num">'+pct(am.ctr)+'</td><td class="num"></td><td class="num">'+fmtRM(am.cpc)+'</td></tr>';
+      for (const ad of (as.ads||[])){
+        const adm = ad.metrics||{};
+        h += '<tr style="opacity:.85"><td style="padding-left:70px"><div class="nm2" style="font-weight:400;font-size:12px">🖼️ '+esc(ad.adName||'')+'</div><div class="sub2">'+(ad.status||'')+'</div></td>';
+        h += '<td class="num">'+fmtN(actVal(adm.actions,'onsite_conversion.messaging_conversation_started_7d'))+'</td>';
+        h += '<td class="num"></td><td class="num">'+fmtRM(adm.spend)+'</td><td class="num">'+fmtRM(adm.cpm)+'</td>';
+        h += '<td class="num">'+fmtN(adm.impressions)+'</td><td class="num"></td><td class="num">'+fmtN(adm.reach)+'</td>';
+        h += '<td class="num">'+pct(adm.ctr)+'</td><td class="num"></td><td class="num">'+fmtRM(adm.cpc)+'</td></tr>';
+      }
+    }
+  }
+  h += '</table></div>';
+  h += '<div class="muted" style="margin-top:6px">Results = WhatsApp conversation started · Data Zernio · '+metaFrom+' → '+metaTo+'</div>';
+  $('content').innerHTML = h + '</div>';
+  drawTrend(d);
+}
+function kpi(lb, vl, sb){ return '<div class="statcard'+(lb==='Amount Spent'?' accent':'')+'"><div class="lb">'+lb+'</div><div class="vl">'+vl+'</div><div class="sb">'+sb+'</div></div>'; }
+function budgetHealthHtml(fin, T){
+  const bal = Number(fin.balance||0);
+  // anggap daily budget dari tree
+  let daily = 0;
+  if (dashData && dashData.tree.campaigns) for (const c of dashData.tree.campaigns){
+    for (const as of (c.adSets||[])) daily += Number(((as.budget||{}).amount)||0);
+  }
+  const daysLeft = daily>0 ? Math.floor(bal/daily) : null;
+  const pctUsed = T.spend ? Math.round(T.spend/(T.spend+bal)*100) : 0;
+  let bar = '<div style="height:8px;background:#eee;border-radius:6px;overflow:hidden;margin:8px 0 6px"><div style="height:100%;width:'+Math.min(pctUsed,100)+'%;background:var(--accent);border-radius:6px"></div></div>';
+  return '<div style="font-size:20px;font-weight:700">'+fmtRM(bal)+'</div><div class="muted" style="font-size:11.5px">baki akaun</div>'+bar+'<div style="font-size:11.5px;color:var(--dim)">'+pctUsed+'% digunakan · '+(daysLeft!==null?('~'+daysLeft+' hari lagi (RM'+fmtRM(daily)+'/hari)'):'—')+'</div>';
+}
+function deliveryAlertsHtml(camps){
+  let alerts = [];
+  for (const c of (camps||[])){
+    if (c.status !== 'active') alerts.push({icon:'⏸', txt: esc(c.campaignName||'')+' — '+ (c.status||'')});
+    if (c.reviewStatus && c.reviewStatus !== 'approved') alerts.push({icon:'⚠️', txt: esc(c.campaignName||'')+' — review: '+esc(c.reviewStatus)});
+  }
+  const rows = (dashData&&dashData.insights&&dashData.insights.data)||[];
+  for (const r of rows){
+    const act = actVal(r.actions,'onsite_conversion.messaging_conversation_started_7d');
+    const spend = Number(r.spend||0);
+    if (spend > 50 && !act) alerts.push({icon:'📉', txt: esc(r.campaign_name||'')+' — spend tanpa hasil'});
+  }
+  if (!alerts.length) return '<div style="color:var(--faint);font-size:12.5px;padding:8px 2px">✅ Tiada alert — semua normal</div>';
+  return alerts.slice(0,5).map(a=>'<div style="display:flex;gap:9px;padding:8px 6px;border-bottom:1px solid #f3f4f6;font-size:12.5px;align-items:center"><span>'+a.icon+'</span><span>'+a.txt+'</span></div>').join('');
+}
+function drawTrend(d){
+  const svg = $('trendChart'); if (!svg) return;
+  // kumpul daily spend dari tree (campaign level)
+  let daily = [];
+  for (const c of (d.tree.campaigns||[])) for (const day of (c.daily||[])) daily.push(day);
+  if (!daily.length){ svg.innerHTML='<text x="300" y="95" text-anchor="middle" fill="#9ca3af" font-size="12">Tiada data harian</text>'; return; }
+  daily.sort((a,b)=>String(a.date_start||a.date).localeCompare(String(b.date_start||b.date)));
+  const W=600,H=190,padL=46,padR=10,padT=14,padB=26;
+  const iw=W-padL-padR, ih=H-padT-padB;
+  const maxSp = Math.max(...daily.map(d=>Number(d.spend||0)), 10);
+  const pts = daily.map((d,i)=>{
+    const x = padL + (daily.length>1 ? i*(iw/(daily.length-1)) : iw/2);
+    const y = padT + ih - (Number(d.spend||0)/maxSp)*ih;
+    return [x,y,d];
+  });
+  // line path
+  let path = 'M'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L');
+  // grid lines
+  let g = '';
+  for (let i=0;i<=3;i++){ const gy = padT + ih*i/3; const val = maxSp*(1-i/3); g += '<line x1="'+padL+'" y1="'+gy+'" x2="'+(W-padR)+'" y2="'+gy+'" stroke="#f0f1f3" stroke-width="1"/>'; g += '<text x="'+(padL-6)+'" y="'+(gy+4)+'" text-anchor="end" fill="#9ca3af" font-size="10">'+fmtRM(val)+'</text>'; }
+  // area fill
+  const area = path + ' L'+pts[pts.length-1][0].toFixed(1)+','+(padT+ih)+' L'+pts[0][0].toFixed(1)+','+(padT+ih)+' Z';
+  let circles = '';
+  const labelEvery = Math.ceil(pts.length/8);
+  let labels = '';
+  pts.forEach((p,i)=>{
+    circles += '<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.6" fill="#e0784e"/>';
+    if (i%labelEvery===0 || i===pts.length-1){
+      const dstr = String(p[2].date_start||p[2].date||'');
+      labels += '<text x="'+p[0]+'" y="'+(H-8)+'" text-anchor="middle" fill="#9ca3af" font-size="9">'+(dstr?dstr.slice(5):'')+'</text>';
+    }
+  });
+  svg.innerHTML = g
+    + '<path d="'+area+'" fill="rgba(224,120,78,.08)"/>'
+    + '<path d="'+path+'" fill="none" stroke="#e0784e" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+    + circles + labels;
+}
+function applyDates(){
+  const f = $('mFrom').value, t = $('mTo').value;
+  if (f && t && f<=t){ metaFrom=f; metaTo=t; $('content').innerHTML='<div style="color:var(--faint);padding:40px;text-align:center">Memuat…</div>'; loadDash(); }
+}
+
+/* mascot drag + status */
+(function(){const m=$('mascot');let on=false,ox=0,oy=0;
+  m.addEventListener('mousedown',e=>{on=true;ox=e.clientX-m.getBoundingClientRect().left;oy=e.clientY-m.getBoundingClientRect().top;e.preventDefault();});
+  document.addEventListener('mousemove',e=>{if(!on)return;m.style.left=Math.min(Math.max(0,e.clientX-ox),innerWidth-68)+'px';m.style.top=Math.min(Math.max(0,e.clientY-oy),innerHeight-68)+'px';m.style.right='auto';m.style.bottom='auto';});
+  document.addEventListener('mouseup',()=>on=false);})();
+let la=0;
+setInterval(async()=>{try{const d=await get('/api/activity');if(d.last_change&&d.last_change>la){la=d.last_change;$('mascot').classList.add('busy');$('mt').textContent='sedang bekerja…';setTimeout(()=>{$('mascot').classList.remove('busy');$('mt').textContent='Ana';},3500);}}catch(e){}},5000);
+
+/* boot */
+(async()=>{try{[B,S]=await Promise.all([get('/api/brain'),get('/api/skills')]);
+  $('navBrain').textContent=B.files.length;$('navSkills').textContent=S.total;viewDocs();}
+  catch(e){$('content').innerHTML='<div style="color:#c0392b;padding:40px;text-align:center">Server tak jalan — pastikan brain_server.py hidup (python brain_server.py).</div>';}})();
+</script>
+</body>
+</html>
