@@ -91,19 +91,40 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def _handle_meta(self, path, u):
-        """Proxy ke Zernio API untuk Meta Ads dashboard (JFR Auto)."""
+        """Proxy ke Zernio API — MULTI-CLIENT. `adAccountId` query param menentukan akaun.
+        Default: JFR Auto (z.AD_ACCOUNT_ID) — supaya setup asal terus berfungsi."""
         try:
             import zernio_api as z
         except Exception as e:
             self._send(500, json.dumps({"error": "zernio import fail: %s" % e}))
             return
         try:
-            if path == "/api/meta/overview":
-                d = z.get_tree()
+            qs = parse_qs(u.query)
+            # akaun terpilih dari query; fallback JFR Auto
+            adid = (qs.get("adAccountId", [""])[0] or z.AD_ACCOUNT_ID)
+            from_date = qs.get("from", [""])[0] or ""
+            to_date = qs.get("to", [""])[0] or ""
+            FIELDS_C = "campaign_name,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,inline_link_clicks,inline_link_click_ctr,actions,cost_per_action_type,objective"
+            FIELDS_A = FIELDS_C + ",adset_name,ad_name"
+
+            if path == "/api/meta/accounts":
+                # SEMUA connected ad accounts utk dropdown
+                d = z.get_ad_accounts()
+                accs = d.get("accounts", []) if isinstance(d, dict) else d
+                out = []
+                for a in accs or []:
+                    out.append({"id": a.get("id"), "name": a.get("name"),
+                                "currency": a.get("currency"),
+                                "status": a.get("accountStatus")})
+                out.sort(key=lambda x: (x.get("name") or "").lower())
+                self._send(200, json.dumps({"accounts": out, "default": z.AD_ACCOUNT_ID,
+                                             "default_name": "JFR Auto Ad"}))
+            elif path == "/api/meta/overview":
+                d = z.get_tree(adid, from_date or None, to_date or None)
                 camps = d.get("campaigns", [])
                 # aggregate
                 total_spend = 0; total_impr = 0; total_clicks = 0; total_reach = 0
-                total_wa = 0; total_ctr_w = 0
+                total_wa = 0
                 for c in camps:
                     m = c.get("metrics", {})
                     total_spend += m.get("spend", 0) or 0
@@ -112,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
                     total_reach += m.get("reach", 0) or 0
                     acts = m.get("actions", {})
                     total_wa += (acts.get("onsite_conversion.messaging_conversation_started_7d", 0) or 0)
-                fin = z.get_finance()
+                fin = z.get_finance(adid)
                 self._send(200, json.dumps({
                     "balance": fin.get("balance"),
                     "amountSpent": fin.get("amountSpent"),
@@ -124,53 +145,115 @@ class Handler(BaseHTTPRequestHandler):
                     "total_reach": total_reach,
                     "total_whatsapp": total_wa,
                     "campaign_count": len(camps),
+                    "adAccountId": adid,
                     "campaigns": camps
                 }))
             elif path == "/api/meta/campaigns":
-                d = z.get_campaigns()
+                d = z.get_campaigns(adid)
                 self._send(200, json.dumps(d))
             elif path == "/api/meta/finance":
-                self._send(200, json.dumps(z.get_finance()))
+                self._send(200, json.dumps(z.get_finance(adid)))
             elif path == "/api/meta/tree":
-                self._send(200, json.dumps(z.get_tree()))
+                self._send(200, json.dumps(z.get_tree(adid, from_date or None, to_date or None)))
             elif path == "/api/meta/insights":
-                qs = parse_qs(u.query)
-                from_date = qs.get("from", [""])[0] or "2026-08-01"
-                to_date = qs.get("to", [""])[0] or "2026-09-05"
                 lvl = qs.get("level", ["campaign"])[0]
-                obj = qs.get("objectId", [z.AD_ACCOUNT_ID])[0]
+                obj = qs.get("objectId", [adid])[0]
+                fld = FIELDS_A if lvl != "campaign" else FIELDS_C
                 d = z.api_get("/ads/insights", {
                     "accountId": z.ZERNIO_ACCOUNT_ID,
-                    "adAccountId": z.AD_ACCOUNT_ID,
+                    "adAccountId": adid,
                     "objectId": obj,
                     "level": lvl,
-                    "fields": "campaign_name,adset_name,ad_name,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,inline_link_clicks,inline_link_click_ctr,actions,cost_per_action_type,objective",
-                    "fromDate": from_date, "toDate": to_date,
+                    "fields": fld,
+                    "fromDate": from_date or "2026-08-01", "toDate": to_date or "2026-09-05",
                 })
                 self._send(200, json.dumps(d))
             elif path == "/api/meta/dash":
-                # Dashboard penuh: tree (dgn daily) + finance + insights campaign
-                qs = parse_qs(u.query)
-                from_date = qs.get("from", [""])[0] or "2026-08-01"
-                to_date = qs.get("to", [""])[0] or "2026-09-05"
+                # Dashboard penuh multi-client: tree + finance + insights campaign
+                # + daily + previous-period (WoW) + ad-level (Top Ads)
+                f = from_date or "2026-08-01"
+                t = to_date or _time.strftime("%Y-%m-%d")
+                # previous period = sama panjang, terus sebelum from
+                try:
+                    f0 = _time.mktime(_time.strptime(f, "%Y-%m-%d"))
+                except Exception:
+                    f0 = _time.time() - 30 * 86400
+                try:
+                    t0 = _time.mktime(_time.strptime(t, "%Y-%m-%d"))
+                except Exception:
+                    t0 = _time.time()
+                span_days = max(1, int(round((t0 - f0) / 86400)) + 1)
+                prev_to = f0 - 86400
+                prev_from = prev_to - (span_days - 1) * 86400
+                fmt = lambda ts: _time.strftime("%Y-%m-%d", _time.localtime(ts))
                 tree = z.api_get("/ads/tree", {
-                    "accountId": z.ZERNIO_ACCOUNT_ID,
-                    "adAccountId": z.AD_ACCOUNT_ID,
-                    "timeIncrement": "1",
-                    "fromDate": from_date, "toDate": to_date,
-                })
-                fin = z.get_finance()
+                    "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
+                    "timeIncrement": "1", "fromDate": f, "toDate": t})
+                fin = z.get_finance(adid)
                 ins = z.api_get("/ads/insights", {
-                    "accountId": z.ZERNIO_ACCOUNT_ID,
-                    "adAccountId": z.AD_ACCOUNT_ID,
-                    "objectId": z.AD_ACCOUNT_ID,
-                    "level": "campaign",
-                    "fields": "campaign_name,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,inline_link_clicks,inline_link_click_ctr,actions,cost_per_action_type,objective",
-                    "fromDate": from_date, "toDate": to_date,
-                })
+                    "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
+                    "objectId": adid, "level": "campaign", "fields": FIELDS_C,
+                    "fromDate": f, "toDate": t})
+                prev_ins = z.api_get("/ads/insights", {
+                    "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
+                    "objectId": adid, "level": "campaign", "fields": FIELDS_C,
+                    "fromDate": fmt(prev_from), "toDate": fmt(prev_to)})
+                ads_ins = z.api_get("/ads/insights", {
+                    "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
+                    "objectId": adid, "level": "ad", "fields": FIELDS_A,
+                    "fromDate": f, "toDate": t})
+                daily_ins = z.api_get("/ads/insights", {
+                    "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
+                    "objectId": adid, "level": "ad", "timeIncrement": "1",
+                    "fields": "ad_name,spend,impressions,clicks,reach",
+                    "fromDate": f, "toDate": t})
                 self._send(200, json.dumps({"tree": tree, "finance": fin,
                                              "insights": ins,
-                                             "from": from_date, "to": to_date}))
+                                             "prev_insights": prev_ins,
+                                             "ads_insights": ads_ins,
+                                             "daily_insights": daily_ins,
+                                             "from": f, "to": t,
+                                             "prev_from": fmt(prev_from), "prev_to": fmt(prev_to),
+                                             "adAccountId": adid}))
+            elif path == "/api/meta/pm":
+                # Performance Marketing dashboard — current vs previous period
+                t = to_date or _time.strftime("%Y-%m-%d")
+                try:
+                    _to = _time.strptime(t, "%Y-%m-%d")
+                except Exception:
+                    _to = _time.localtime()
+                _from = _time.mktime(_to) - 6 * 86400
+                f = from_date or _time.strftime("%Y-%m-%d", _time.localtime(_from))
+                nd = _time.mktime(_to) - _time.mktime(_to) % 86400
+                try:
+                    f0 = _time.mktime(_time.strptime(f, "%Y-%m-%d"))
+                except Exception:
+                    f0 = nd - 6 * 86400
+                span_days = max(1, int(round((nd - f0) / 86400)) + 1)
+                prev_to = f0 - 86400
+                prev_from = prev_to - (span_days - 1) * 86400
+                fmt = lambda ts: _time.strftime("%Y-%m-%d", _time.localtime(ts))
+                fields = FIELDS_A
+                cur = z.api_get("/ads/insights", {
+                    "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
+                    "objectId": adid, "level": "ad", "fields": fields,
+                    "fromDate": f, "toDate": t})
+                prev = z.api_get("/ads/insights", {
+                    "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
+                    "objectId": adid, "level": "ad", "fields": fields,
+                    "fromDate": fmt(prev_from), "toDate": fmt(prev_to)})
+                daily = z.api_get("/ads/insights", {
+                    "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
+                    "objectId": adid, "level": "ad", "timeIncrement": "1",
+                    "fields": "ad_name,spend,impressions,clicks,reach,date_start",
+                    "fromDate": f, "toDate": t})
+                fin = z.get_finance(adid)
+                self._send(200, json.dumps({
+                    "current": cur, "previous": prev, "daily": daily,
+                    "finance": fin,
+                    "from": f, "to": t,
+                    "prev_from": fmt(prev_from), "prev_to": fmt(prev_to),
+                    "adAccountId": adid}))
             else:
                 self._send(404, json.dumps({"error": "meta endpoint tak jumpa"}))
         except Exception as e:
@@ -201,6 +284,37 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, json.dumps({"worker_id": worker_id, "status": "running"}))
             except Exception as e:
                 self._send(400, json.dumps({"error": str(e)}))
+        elif u.path == "/api/meta/pdf":
+            # Export PDF report — data datang dari frontend (dashboard state semasa)
+            try:
+                import meta_pdf
+            except Exception as e:
+                self._send(500, json.dumps({"error": "meta_pdf import fail: %s" % e}))
+                return
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+                ctx = body.get("context", {})
+                dash_data = body.get("data", {})
+                if not ctx or not dash_data:
+                    self._send(400, json.dumps({"error": "context/data diperlukan"}))
+                    return
+                pdf_path, fname = meta_pdf.generate(ctx, dash_data)
+                with open(pdf_path, "rb") as f:
+                    blob = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("Content-Disposition",
+                                 "attachment; filename*=UTF-8''" + fname.replace(" ", "%20"))
+                self.send_header("Content-Length", str(len(blob)))
+                self.send_header("X-PDF-Filename", fname)
+                self.end_headers()
+                self.wfile.write(blob)
+            except Exception as e:
+                try:
+                    self._send(500, json.dumps({"error": str(e)}))
+                except Exception:
+                    pass
         else:
             self._send(404, json.dumps({"error": "not found"}))
 

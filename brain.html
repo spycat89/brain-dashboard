@@ -97,6 +97,28 @@
   .chatinput button:hover { background:#c95f37; }
   .chatinput button:disabled { opacity:.5; cursor:wait; }
 
+  /* ===== Performance Marketing ===== */
+  .pmkpi { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px 16px; }
+  .pmkpi .v { font-size:24px; font-weight:800; letter-spacing:-0.5px; }
+  .pmkpi .l { font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-top:2px; }
+  .pmkpi .d { font-size:11px; margin-top:6px; padding:2px 8px; border-radius:20px; display:inline-block; }
+  .up { color:#047857; background:#d1fae5; } .down { color:#b91c1c; background:#fee2e2; } .flat { color:#6b7280; background:#f3f4f6; }
+  .pmsec { margin-top:22px; }
+  .pmsec h3 { font-size:15px; font-weight:800; margin-bottom:4px; }
+  .pmsec .sub { font-size:11.5px; color:var(--faint); margin-bottom:12px; }
+  .funnel { display:flex; flex-direction:column; gap:0; }
+  .fstage { position:relative; border-radius:10px; padding:12px 18px; margin-bottom:2px;
+    background:var(--surface); border:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .fstage .fn { font-size:13px; font-weight:700; }
+  .fstage .fv { font-size:16px; font-weight:800; }
+  .fstage .fc { font-size:11px; color:var(--dim); }
+  .fstage .fd { font-size:11px; color:var(--faint); text-align:right; margin-left:10px; }
+  .fconn { text-align:center; color:var(--faint); font-size:14px; line-height:1; padding:2px 0; }
+  .na-tag { color:#9ca3af; font-style:italic; font-size:12px; }
+  .alert-red { border-left:4px solid #dc2626; } .alert-yellow { border-left:4px solid #d97706; } .alert-green { border-left:4px solid #059669; }
+  .insight-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
+  .sortbtn { border:1px solid var(--border); background:var(--surface); color:var(--dim); border-radius:7px; padding:3px 10px; font-size:11.5px; cursor:pointer; margin-right:6px; font-family:var(--font); }
+  .sortbtn.on { background:var(--accent); color:#fff; border-color:var(--accent); }
   /* ===== Meta Ads ===== */
   .statgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:18px 0 26px; }
   .statcard { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
@@ -163,6 +185,7 @@
       <a href="#brain" data-v="docs" class="on"><span>Brain</span><span class="cnt" id="navBrain">3</span></a>
       <a href="#chat" data-v="chat"><span>Chat</span><span class="cnt" id="navChatLive" style="display:none">●</span></a>
       <a href="#meta" data-v="meta"><span>Meta Ads</span></a>
+      <a href="#pm" data-v="pm"><span>Performance Mktg</span></a>
       <div class="grp" style="display:none"></div>
       <a href="#skills" data-v="skills"><span>Skills</span><span class="cnt" id="navSkills">0</span></a>
       <div class="grp">Nanti</div>
@@ -198,7 +221,7 @@ document.querySelectorAll('#nav a[data-v]').forEach(a=>a.addEventListener('click
   e.preventDefault();
   document.querySelectorAll('#nav a').forEach(x=>x.classList.remove('on'));
   a.classList.add('on');
-  ({docs:viewDocs,skills:viewSkills,soon:viewSoon,chat:viewChat,meta:viewMeta})[a.dataset.v]();
+  ({docs:viewDocs,skills:viewSkills,soon:viewSoon,chat:viewChat,meta:viewMeta,pm:viewPM})[a.dataset.v]();
 }));
 function setNav(v){document.querySelectorAll('#nav a').forEach(x=>x.classList.toggle('on',x.dataset.v===v));}
 
@@ -327,38 +350,133 @@ function cleanAnaOut(s){
   return out || '(Ana tak beri jawapan teks)';
 }
 
-/* ===== Meta Ads — layout macam pengajar course ===== */
+/* ===== helpers asas (digunakan seluruh app) — tambahan utk Meta Ads/PM ===== */
+function toDateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtN(n){ return Number(n||0).toLocaleString('en-MY'); }
+function fmtRM(n){ n = Number(n||0); return 'RM' + n.toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function pct(n){ n = Number(n||0); return (Math.round(n*100)/100).toFixed(2)+'%'; }
+function actVal(actions, type){
+  // sokong format list [{action_type,value}] ATAU dict {type:value} (tree Zernio guna dict)
+  if (!actions) return 0;
+  if (Array.isArray(actions)){
+    const a = actions.find(x=>x.action_type===type);
+    return a ? Number(a.value||0) : 0;
+  }
+  if (typeof actions === 'object'){
+    // dict: mungkin {type: value} atau {type: {value}} — Zernio tree guna {type: value}
+    const v = actions[type];
+    if (v==null) return 0;
+    return Number(typeof v==='object' ? (v.value||0) : v) || 0;
+  }
+  return 0;
+}
+function resOf(row){
+  // "Results" = hasil ikut objective campaign. Utk lead-gen/messaging:
+  // messaging_conversation_started (result utama) → fallback first_reply.
+  // Kalau campaign punya action type lain (purchase/lead), guna ia.
+  const acts = row && row.actions;
+  if (!acts) return 0;
+  const types = ['onsite_conversion.messaging_conversation_started_7d',
+                 'onsite_conversion.messaging_first_reply',
+                 'purchase','lead','onsite_conversion.lead',
+                 'offsite_conversion.fb_pixel_purchase'];
+  for (const t of types){
+    const v = actVal(acts, t);
+    if (v) return v;
+  }
+  // objective-aware: kalau row ada objective & actions list, cari conversion pertama
+  return 0;
+}
+function actValDict(actions, type){
+  return actVal(actions, type);
+}
+function $id(s){ return document.getElementById(s); }
+
+/* ===== Meta Ads MULTI-CLIENT — layout pengajar, kaya reporting ===== */
 let dashData = null;
 let metaFrom = '', metaTo = '';
+let metaAcct = '';          // selected adAccountId
+let metaAcctName = '';      // display name
+let metaAccounts = [];      // senarai utk dropdown
+let metaTrendMetric = 'spend';
+let metaLoading = false;
 function viewMeta(){
-  setNav('meta'); $('t1').textContent='Meta Ads'; $('t2').textContent='JFR Auto Ad';
+  setNav('meta'); $('t1').textContent='Meta Ads'; $('t2').textContent='';
   $('sw').style.display='none';
   const now = new Date();
   metaTo = toDateStr(now);
   const d0 = new Date(now); d0.setDate(1);
   metaFrom = toDateStr(d0);
-  $('content').innerHTML = '<div style="color:var(--faint);padding:40px;text-align:center">Memuat data Meta Ads…</div>';
+  // muat senarai accounts sekali (cache dlm metaAccounts)
+  if (metaAccounts.length){
+    ensureMetaAcct(); renderMetaShell(); loadDash();
+  } else {
+    $('content').innerHTML = '<div style="color:var(--faint);padding:40px;text-align:center">Memuat akaun…</div>';
+    fetch('/api/meta/accounts').then(r=>r.json()).then(d=>{
+      metaAccounts = (d.accounts||[]).filter(a=>a.id);
+      ensureMetaAcct(); renderMetaShell(); loadDash();
+    }).catch(e=>{ $('content').innerHTML='<div style="color:#c0392b;padding:40px;text-align:center">Gagal muat akaun: '+esc(e.message)+'</div>'; });
+  }
+}
+function ensureMetaAcct(){
+  // kekal akaun terpilih (localStorage); default = akaun pertama dlm senarai yg ada 'JFR'
+  const saved = localStorage.getItem('metaAcct') || '';
+  const jfr = metaAccounts.find(a=>/jfr/i.test(a.name||''));
+  const sel = metaAccounts.find(a=>a.id===saved) || jfr || metaAccounts[0];
+  if (sel){ metaAcct = sel.id; metaAcctName = sel.name||sel.id; localStorage.setItem('metaAcct', metaAcct); }
+  $('t2').textContent = metaAcctName;
+}
+function renderMetaShell(){
+  const acctOpts = metaAccounts.map(a=>'<option value="'+esc(a.id)+'"'+(a.id===metaAcct?' selected':'')+'>'+esc(a.name||a.id)+'</option>').join('');
+  $('content').innerHTML = '<div class="wrap" id="metaWrap">'
+    +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">'
+    +'<div><div class="pt" style="font-size:17px">Meta Ads</div>'
+    +'<div class="pd" style="margin:0"><select id="acctSel" class="dte" style="max-width:260px" onchange="onAcctChange()">'+acctOpts+'</select></div></div>'
+    +'<div class="grow" style="flex:1"></div>'
+    +'<input type="date" id="mFrom" value="'+metaFrom+'" class="dte">'
+    +'<span style="color:var(--faint)">→</span>'
+    +'<input type="date" id="mTo" value="'+metaTo+'" class="dte">'
+    +'<button class="refresh" onclick="applyDates()">Tukar</button>'
+    +'<button id="pdfBtn" class="refresh" style="background:#2f3644;color:#fff;border:none;margin-left:4px" onclick="exportPdf()" title="Export laporan PDF utk client">📄 Export PDF</button>'
+    +'</div>'
+    +'<div id="metaBody"><div style="color:var(--faint);padding:30px;text-align:center">Memuat data…</div></div>'
+    +'</div>';
+}
+function onAcctChange(){
+  const sel = $('acctSel'); if (!sel) return;
+  metaAcct = sel.value;
+  const a = metaAccounts.find(x=>x.id===metaAcct);
+  metaAcctName = a ? (a.name||metaAcct) : metaAcct;
+  localStorage.setItem('metaAcct', metaAcct);
+  $('t2').textContent = metaAcctName;
+  // LOADING state — jangan papar data lama dgn nama baru
+  const body = $('metaBody');
+  if (body) body.innerHTML = '<div style="color:var(--faint);padding:30px;text-align:center">Memuat data '+esc(metaAcctName)+'…</div>';
   loadDash();
 }
-function toDateStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function fmtRM(n){ n = n||0; return 'RM' + Number(n).toLocaleString('en-MY',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function fmtN(n){ return Number(n||0).toLocaleString('en-MY'); }
-function pct(n){ n = Number(n||0); return (Math.round(n*1000)/10).toFixed(2)+'%'; }
-function actVal(actions, type){
-  if (!Array.isArray(actions)) return 0;
-  const a = actions.find(x=>x.action_type===type);
-  return a ? Number(a.value||0) : 0;
-}
-async function loadDash(){
-  try{
-    const url = '/api/meta/dash?from='+metaFrom+'&to='+metaTo;
-    const d = await (await fetch(url)).json();
+let metaLoadSeq = 0;
+function loadDash(){
+  if (!metaAcct){ return; }
+  const body = $('metaBody');
+  if (body && !metaLoading) body.innerHTML = '<div style="color:var(--faint);padding:30px;text-align:center">Memuat data '+esc(metaAcctName)+'…</div>';
+  metaLoading = true;
+  const seq = ++metaLoadSeq;   // guard: elak response lama menimpa yang baru
+  const url = '/api/meta/dash?from='+metaFrom+'&to='+metaTo+'&adAccountId='+encodeURIComponent(metaAcct);
+  fetch(url).then(r=>r.json()).then(d=>{
+    if (seq !== metaLoadSeq) return;   // request lama — abaikan
+    metaLoading = false;
     if (d.error) throw new Error(d.error);
+    if (!(d.insights||{}).data || !(d.insights.data).length){
+      if ($('metaBody')) $('metaBody').innerHTML = '<div style="color:var(--faint);padding:50px;text-align:center">📭 Tiada data iklan utk akaun ini dalam tempoh terpilih.<br><span style="font-size:12px">Cuba tukar date range atau pilih akaun lain.</span></div>';
+      return;
+    }
     dashData = d;
     renderDash(d);
-  }catch(e){
-    $('content').innerHTML = '<div style="color:#c0392b;padding:40px;text-align:center">Gagal muat: '+esc(e.message)+'</div>';
-  }
+  }).catch(e=>{
+    if (seq !== metaLoadSeq) return;
+    metaLoading = false;
+    if ($('metaBody')) $('metaBody').innerHTML = '<div style="color:#c0392b;padding:40px;text-align:center">Tidak dapat muat data Meta Ads utk akaun ini.<br><span style="font-size:12px">'+esc(e.message)+'</span></div>';
+  });
 }
 function computeTotals(d){
   const camps = (d.tree.campaigns)||[];
@@ -370,63 +488,93 @@ function computeTotals(d){
     T.reach += Number(r.reach||0);
     T.clicks += Number(r.clicks||0);
     T.linkClicks += Number(r.inline_link_clicks||0);
-    T.results += actVal(r.actions,'onsite_conversion.messaging_conversation_started_7d')
-              || actVal(r.actions,'onsite_conversion.messaging_first_reply');
+    T.results += resOf(r);
+  }
+  if (T.impr && T.reach) T.freq = T.impr/T.reach;
+  return T;
+}
+function computeTotalsRows(rows){
+  const T = {spend:0, impr:0, reach:0, clicks:0, linkClicks:0, results:0, freq:0};
+  for (const r of rows){
+    T.spend += Number(r.spend||0);
+    T.impr += Number(r.impressions||0);
+    T.reach += Number(r.reach||0);
+    T.clicks += Number(r.clicks||0);
+    T.linkClicks += Number(r.inline_link_clicks||0);
+    T.results += resOf(r);
   }
   if (T.impr && T.reach) T.freq = T.impr/T.reach;
   return T;
 }
 function renderDash(d){
   const T = computeTotals(d);
+  const P = computeTotalsRows((d.prev_insights&&d.prev_insights.data)||[]);
   const fin = d.finance||{};
   const camps = (d.tree.campaigns)||[];
   const campRows = (d.insights.data)||[];
-  let h = '<div class="wrap">';
-  // ===== header =====
-  h += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">';
-  h += '<div><div class="pt" style="font-size:17px">Meta Ads</div>';
-  h += '<div class="pd" style="margin:0">'+esc(fin.adAccountId||'')+' · baki '+fmtRM(fin.balance)+' · '+(fin.currency||'MYR')+'</div></div>';
+  const adsRows = (d.ads_insights&&d.ads_insights.data)||[];
+  const cpr = T.results ? T.spend/T.results : null;
+  const lcpc = T.linkClicks ? T.spend/T.linkClicks : 0;
+  const cpm = T.impr ? T.spend*1000/T.impr : 0;
+  const ctrAll = T.impr ? T.clicks/T.impr*100 : 0;
+  const ctrLink = T.impr ? T.linkClicks/T.impr*100 : 0;
+  const body = $('metaBody'); if (!body) return;
+  let h = '';
+  // ===== HEADER bar (akaun + tarikh) =====
+  h += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">';
+  h += '<div style="font-size:13px;font-weight:700;color:var(--accent)">'+esc(metaAcctName)+'</div>';
+  h += '<span style="color:var(--faint);font-size:11.5px">'+metaFrom+' → '+metaTo+'</span>';
+  if (d.prev_from) h += '<span style="color:var(--faint);font-size:11px">(vs '+d.prev_from+' → '+d.prev_to+')</span>';
   h += '<div class="grow" style="flex:1"></div>';
-  h += '<input type="date" id="mFrom" value="'+metaFrom+'" class="dte">';
-  h += '<span style="color:var(--faint)">→</span>';
-  h += '<input type="date" id="mTo" value="'+metaTo+'" class="dte">';
-  h += '<button class="refresh" onclick="applyDates()">Tukar</button>';
+  h += '<span style="font-size:11.5px;color:var(--faint)">baki akaun '+fmtRM(fin.balance)+' · '+(fin.currency||'MYR')+'</span>';
   h += '</div>';
-  // ===== KPI cards =====
-  h += '<div class="statgrid">';
-  h += kpi('Amount Spent', fmtRM(T.spend), 'kos sebenar');
-  h += kpi('Results', fmtN(T.results), T.results?fmtRM(T.spend/T.results)+' / result':'—');
-  h += kpi('CTR (all)', pct(T.clicks&&T.impr?T.clicks*100/T.impr:0), 'klik / 1K paparan');
-  h += kpi('CPM', fmtRM(T.impr?T.spend*1000/T.impr:0), 'kos / 1K impressions');
-  h += kpi('Impressions', fmtN(T.impr), 'dilihat');
-  h += kpi('Reach', fmtN(T.reach), 'orang unik · freq '+T.freq.toFixed(2));
+  // ===== KPI cards — 11 metrik reporting (primary/delivery/traffic) =====
+  h += '<div class="statgrid" style="margin:10px 0 8px">';
+  h += kpi('Results', fmtN(T.results), T.results?'Messaging conversations':'—');
+  h += kpi('Cost / Result', cpr!=null?fmtRM(cpr):'—', cpr!=null?'kos per hasil':'tiada hasil');
+  h += kpi('Amount Spent', fmtRM(T.spend), 'jumlah belanja');
+  h += kpi('Reach', fmtN(T.reach), 'orang unik');
+  h += kpi('CPM', fmtRM(cpm), 'kos / 1K impressions');
+  h += kpi('Impressions', fmtN(T.impr), 'total paparan');
+  h += kpi('Frequency', T.freq?T.freq.toFixed(2)+'x':'—', 'impr / reach');
+  h += kpi('CTR (all)', pct(ctrAll), 'semua klik');
+  h += kpi('CTR (link)', pct(ctrLink), 'klik link / 1K');
+  h += kpi('CPC (link)', fmtRM(lcpc), 'kos per link click');
   h += '</div>';
-  // ===== grid: chart kiri (2/3) + panels kanan (1/3) =====
+  h += '<div style="font-size:10.5px;color:var(--faint);margin:-2px 0 10px">Results = messaging conversations (lead-gen) · Budget: lihat per ad set dlm Delivery Hierarchy</div>';
+  // ===== WoW comparison strip =====
+  h += wowCompareHtml(T, P, d);
+  // ===== grid: chart kiri + panels kanan =====
   h += '<div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:16px">';
-  // chart
-  h += '<div class="tablewrap"><div class="thead"><span class="grow">📈 Performance Trend</span><span class="muted">spend harian</span></div>';
+  h += '<div class="tablewrap"><div class="thead"><span class="grow">📈 Performance Trend</span><select id="trendMetric" class="dte" style="font-size:11px;padding:2px 6px;max-width:150px" onchange="metaTrendMetric=this.value;drawTrend(dashData)">'
+    +'<option value="spend"'+(metaTrendMetric==='spend'?' selected':'')+'>Amount Spent</option>'
+    +'<option value="results"'+(metaTrendMetric==='results'?' selected':'')+'>Results</option>'
+    +'<option value="impr"'+(metaTrendMetric==='impr'?' selected':'')+'>Impressions</option>'
+    +'<option value="reach"'+(metaTrendMetric==='reach'?' selected':'')+'>Reach</option>'
+    +'<option value="cpm"'+(metaTrendMetric==='cpm'?' selected':'')+'>CPM</option>'
+    +'<option value="ctr"'+(metaTrendMetric==='ctr'?' selected':'')+'>CTR</option>'
+    +'</select></div>';
   h += '<div style="padding:14px 18px"><svg id="trendChart" viewBox="0 0 600 190" style="width:100%;height:auto;display:block"></svg></div></div>';
-  // panels kanan
   h += '<div style="display:flex;flex-direction:column;gap:14px">';
-  h += '<div class="tablewrap" style="flex:1"><div class="thead">💰 Budget Health</div><div style="padding:14px 18px">'+budgetHealthHtml(fin, T)+'</div></div>';
-  h += '<div class="tablewrap" style="flex:1"><div class="thead">⚡ Delivery Alerts</div><div style="padding:10px 14px">'+deliveryAlertsHtml(camps)+'</div></div>';
+  h += '<div class="tablewrap" style="flex:1"><div class="thead">💰 Budget Health</div><div style="padding:14px 18px">'+budgetHealthHtml(fin, T, d)+'</div></div>';
+  h += '<div class="tablewrap" style="flex:1"><div class="thead">⚡ Delivery Alerts</div><div style="padding:10px 14px">'+deliveryAlertsHtml(camps, d)+'</div></div>';
   h += '</div></div>';
   // ===== Delivery hierarchy table =====
-  h += '<div class="tablewrap" style="overflow-x:auto"><div class="thead"><span class="grow">🧬 Delivery Hierarchy</span><span class="muted">'+campRows.length+' campaign</span></div>';
-  h += '<table class="mt" style="min-width:1100px"><tr>';
+  h += '<div class="tablewrap" style="overflow-x:auto;margin-bottom:16px"><div class="thead"><span class="grow">🧬 Delivery Hierarchy</span><span class="muted">'+(campRows.length||0)+' campaign</span></div>';
+  h += '<table class="mt" style="min-width:1050px"><tr>';
   const cols = [
     ['nm','Delivery Hierarchy'],['results','Results'],['cpr','Cost / Result'],['spend','Amount Spent'],
     ['cpm','CPM'],['impr','Impressions'],['freq','Freq.'],['reach','Reach'],['ctr','CTR (all)'],['lctr','CTR (Link)'],['cpc','CPC (Link)']
   ];
   for (const c of cols) h += '<th class="'+(c[0]==='nm'?'':'num')+'">'+c[1]+'</th>';
   h += '</tr>';
-  // baris campaign + expand adset/ads
   for (const r of campRows){
-    const cpr = r.results ? Number(r.spend)/r.results : 0;
-    const lcpc = Number(r.inline_link_clicks||0) ? Number(r.spend)/Number(r.inline_link_clicks) : 0;
+    const cres = resOf(r);
+    const rcpr = cres ? Number(r.spend)/cres : null;
+    const rlcpc = Number(r.inline_link_clicks||0) ? Number(r.spend)/Number(r.inline_link_clicks) : null;
     h += '<tr><td><div class="nm2">📢 '+esc(r.campaign_name||'')+'</div><div class="sub2">'+(r.objective||'')+'</div></td>';
-    h += '<td class="num" style="font-weight:600">'+fmtN(r.results)+'</td>';
-    h += '<td class="num">'+fmtRM(cpr)+'</td>';
+    h += '<td class="num" style="font-weight:600">'+fmtN(cres)+'</td>';
+    h += '<td class="num">'+(rcpr!=null?fmtRM(rcpr):'—')+'</td>';
     h += '<td class="num">'+fmtRM(r.spend)+'</td>';
     h += '<td class="num">'+fmtRM(r.cpm)+'</td>';
     h += '<td class="num">'+fmtN(r.impressions)+'</td>';
@@ -434,101 +582,668 @@ function renderDash(d){
     h += '<td class="num">'+fmtN(r.reach)+'</td>';
     h += '<td class="num">'+pct(r.ctr)+'</td>';
     h += '<td class="num">'+pct(r.inline_link_click_ctr)+'</td>';
-    h += '<td class="num">'+fmtRM(lcpc)+'</td></tr>';
-    // ad set & ads dari tree
+    h += '<td class="num">'+(rlcpc!=null?fmtRM(rlcpc):'—')+'</td></tr>';
     const campTree = camps.find(c=>c.campaignName===r.campaign_name);
     if (campTree) for (const as of (campTree.adSets||[])){
       const am = as.metrics||{};
-      h += '<tr style="background:#faf7f4"><td style="padding-left:38px"><div class="nm2" style="font-weight:500">🎯 '+esc(as.adSetName||'')+'</div><div class="sub2">budget '+fmtRM((as.budget||{}).amount)+'/'+((as.budget||{}).type||'')+' · '+((as.optimizationGoal)||'')+'</div></td>';
-      h += '<td class="num">'+fmtN(actVal(am.actions,'onsite_conversion.messaging_conversation_started_7d'))+'</td>';
-      h += '<td class="num"></td><td class="num">'+fmtRM(am.spend)+'</td><td class="num">'+fmtRM(am.cpm)+'</td>';
+      const asres = resOf(am);
+      h += '<tr style="background:#faf7f4"><td style="padding-left:38px"><div class="nm2" style="font-weight:500">🎯 '+esc(as.adSetName||'')+'</div><div class="sub2">Daily budget '+fmtRM((as.budget||{}).amount)+' · '+((as.budget||{}).type||'')+' · '+((as.optimizationGoal)||'')+'</div></td>';
+      h += '<td class="num">'+fmtN(asres)+'</td>';
+      h += '<td class="num">'+(asres?fmtRM(am.spend/asres):'—')+'</td><td class="num">'+fmtRM(am.spend)+'</td><td class="num">'+fmtRM(am.cpm)+'</td>';
       h += '<td class="num">'+fmtN(am.impressions)+'</td><td class="num"></td><td class="num">'+fmtN(am.reach)+'</td>';
-      h += '<td class="num">'+pct(am.ctr)+'</td><td class="num"></td><td class="num">'+fmtRM(am.cpc)+'</td></tr>';
+      h += '<td class="num">'+pct(am.ctr)+'</td><td class="num">'+pct(am.inlineLinkClickCtr)+'</td><td class="num">'+fmtRM(am.cpc)+'</td></tr>';
       for (const ad of (as.ads||[])){
         const adm = ad.metrics||{};
+        const adres = resOf(adm);
         h += '<tr style="opacity:.85"><td style="padding-left:70px"><div class="nm2" style="font-weight:400;font-size:12px">🖼️ '+esc(ad.adName||'')+'</div><div class="sub2">'+(ad.status||'')+'</div></td>';
-        h += '<td class="num">'+fmtN(actVal(adm.actions,'onsite_conversion.messaging_conversation_started_7d'))+'</td>';
-        h += '<td class="num"></td><td class="num">'+fmtRM(adm.spend)+'</td><td class="num">'+fmtRM(adm.cpm)+'</td>';
+        h += '<td class="num">'+fmtN(adres)+'</td>';
+        h += '<td class="num">'+(adres?fmtRM(adm.spend/adres):'—')+'</td><td class="num">'+fmtRM(adm.spend)+'</td><td class="num">'+fmtRM(adm.cpm)+'</td>';
         h += '<td class="num">'+fmtN(adm.impressions)+'</td><td class="num"></td><td class="num">'+fmtN(adm.reach)+'</td>';
-        h += '<td class="num">'+pct(adm.ctr)+'</td><td class="num"></td><td class="num">'+fmtRM(adm.cpc)+'</td></tr>';
+        h += '<td class="num">'+pct(adm.ctr)+'</td><td class="num">'+pct(adm.inlineLinkClickCtr)+'</td><td class="num">'+fmtRM(adm.cpc)+'</td></tr>';
       }
     }
   }
   h += '</table></div>';
-  h += '<div class="muted" style="margin-top:6px">Results = WhatsApp conversation started · Data Zernio · '+metaFrom+' → '+metaTo+'</div>';
-  $('content').innerHTML = h + '</div>';
+  // ===== TOP PERFORMING ADS (dari ads_insights — ad-level real) =====
+  h += topAdsHtml(adsRows);
+  // ===== AI WEEKLY ANALYSIS =====
+  h += aiWeeklyHtml(T, P, campRows, adsRows, d);
+  h += '<div class="muted" style="margin-top:6px">Data Zernio · akaun '+esc(metaAcct)+' · '+metaFrom+' → '+metaTo+'</div>';
+  body.innerHTML = h;
   drawTrend(d);
 }
-function kpi(lb, vl, sb){ return '<div class="statcard'+(lb==='Amount Spent'?' accent':'')+'"><div class="lb">'+lb+'</div><div class="vl">'+vl+'</div><div class="sb">'+sb+'</div></div>'; }
-function budgetHealthHtml(fin, T){
+function wowCompareHtml(T, P, d){
+  const mk=(lb,cur,prev,fmt,inv)=>{
+    const chg = (prev!=null && prev!==0 && cur!=null) ? (cur-prev)/prev*100 : null;
+    let badge='', arrow='';
+    if (chg!=null){
+      const good = inv ? chg<0 : chg>0; const bad = inv ? chg>0 : chg<0;
+      if (chg>0.05||chg<-0.05){ arrow = chg>0?'▲':'▼'; }
+      badge = '<span class="d '+(bad?'down':good?'up':'flat')+'" style="margin-left:4px">'+arrow+' '+Math.abs(chg).toFixed(1)+'%</span>';
+    }
+    return '<div style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px">'
+      +'<div style="font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.8px">'+lb+'</div>'
+      +'<div style="font-size:17px;font-weight:800;margin-top:2px">'+fmt(cur)+badge+'</div>'
+      +'<div style="font-size:10.5px;color:var(--faint)">prev '+fmt(prev)+'</div></div>';
+  };
+  const cpr=T.results?T.spend/T.results:0, pcpr=P.results?P.spend/P.results:0;
+  const cpm=T.impr?T.spend*1000/T.impr:0, pcpm=P.impr?P.spend*1000/P.impr:0;
+  const ctr=T.impr?T.clicks/T.impr*100:0, pctr=P.impr?P.clicks/P.impr*100:0;
+  return '<div class="tablewrap" style="margin-bottom:16px"><div class="thead">📊 Week-over-Week <span class="muted">current vs prev equivalent period</span></div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px;padding:14px">'
+    +mk('Results', T.results, P.results, fmtN)
+    +mk('Cost / Result', cpr, pcpr, fmtRM, true)
+    +mk('Amount Spent', T.spend, P.spend, fmtRM)
+    +mk('Reach', T.reach, P.reach, fmtN)
+    +mk('Impressions', T.impr, P.impr, fmtN)
+    +mk('CTR (all)', ctr, pctr, x=>x.toFixed(2)+'%')
+    +mk('CPM', cpm, pcpm, fmtRM, true)
+    +'</div><div style="padding:0 14px 10px;font-size:10.5px;color:var(--faint)">▲ naik · ▼ turun · hijau = umumnya positif · merah = umumnya negatif (spend: perubahan sahaja, bukan baik/buruk)</div></div>';
+}
+function topAdsHtml(adsRows){
+  // ranking: ad dengan results >0 → results terbanyak → cost/result terendah → CTR link tinggi.
+  // Ad 0-result TIDAK boleh dianggap "lebih baik" — letak bawah sekali.
+  const ranked = [...adsRows].map(r=>{
+    const res = resOf(r);
+    const sp=+r.spend||0, lnk=+r.inline_link_clicks||0, imp=+r.impressions||0;
+    return {name:r.ad_name||'?', results:res, spend:sp, ctrAll: imp? (+r.clicks||0)/imp*100:0, ctrLnk: imp?lnk/imp*100:0, cpr:res?sp/res:null, campaign:r.campaign_name||''};
+  }).sort((a,b)=> (b.results-a.results) || ((a.cpr||1e9)-(b.cpr||1e9)) || (b.ctrLnk-a.ctrLnk) );
+  const top = ranked.slice(0,5);
+  let h='<div class="tablewrap" style="margin-bottom:16px"><div class="thead">🏆 Top Performing Ads <span class="muted">ranking: hasil terbanyak → cost/result terendah → CTR link</span></div>';
+  h+='<div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">';
+  if (!top.length) h+='<div style="color:var(--faint);font-size:12px">Tiada data ad utk tempoh ini.</div>';
+  top.forEach((a,i)=>{
+    if (!a.results && a.spend>0) return; // skip ad yang ada spend tapi 0 hasil (bukan "top")
+    h+='<div style="display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px">'
+      +'<div style="font-size:18px;font-weight:900;color:'+(i===0?'var(--accent)':'var(--faint)')+'">'+(i+1)+'</div>'
+      +'<div style="flex:1"><div style="font-weight:700;font-size:13px">'+esc(a.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--faint)">'+esc(a.campaign)+'</div></div>'
+      +'<div style="text-align:right;font-size:12px"><div><b>'+fmtN(a.results)+'</b> results'+(a.cpr?' · '+fmtRM(a.cpr)+'/result':'')+'</div>'
+      +'<div style="color:var(--faint)">spend '+fmtRM(a.spend)+' · CTR link '+a.ctrLnk.toFixed(2)+'%</div></div></div>';
+  });
+  h+='</div></div>';
+  return h;
+}
+function aiWeeklyHtml(T, P, campRows, adsRows, d){
+  let facts=[], obs=[], concl=[], rec=[];
+  facts.push(adsRows.length+' ad aktif dalam tempoh pelaporan.');
+  facts.push('Jumlah spend '+fmtRM(T.spend)+'.');
+  facts.push(fmtN(T.results)+' result dijana (messaging conversations).');
+  facts.push('Reach '+fmtN(T.reach)+' orang · '+fmtN(T.impr)+' impressions · frequency '+(T.freq?T.freq.toFixed(2)+'x':'—')+'.');
+  // ad dominasi?
+  const adRes = adsRows.map(r=>{return{name:r.ad_name,res:resOf(r),spend:+r.spend||0};}).sort((a,b)=>b.res-a.res);
+  if (adRes.length>1 && adRes[0] && adRes[0].res>0){
+    const tot=adRes.reduce((s,a)=>s+a.res,0)||1;
+    const share=adRes[0].res/tot*100;
+    if (share>50){ obs.push('Satu creative menerima majoriti hasil ('+share.toFixed(0)+'%): "'+adRes[0].name+'".'); concl.push('Delivery kempen tertumpu pada creative utama tersebut.'); rec.push('Terus pantau creative utama dan pertimbang buat variasi menggunakan angle yang sama.'); }
+  }
+  // WoW obs
+  const chgRes = P.results? ((T.results-P.results)/P.results*100):null;
+  if (chgRes!=null && Math.abs(chgRes)>=5) obs.push('Results '+(chgRes>0?'naik':'turun')+' '+Math.abs(chgRes).toFixed(0)+'% vs tempoh sebelumnya.');
+  const cpr=T.results?T.spend/T.results:0, pcpr=P.results?P.spend/P.results:0;
+  if (pcpr && cpr){ const dchg=(cpr-pcpr)/pcpr*100; if (Math.abs(dchg)>=5) obs.push('Cost per result '+(dchg>0?'naik':'turun')+' '+Math.abs(dchg).toFixed(0)+'% ('+fmtRM(cpr)+' vs '+fmtRM(pcpr)+').'); }
+  // rec default
+  if (!rec.length) rec.push('Teruskan pemantauan; fokus pada creative yang memberi hasil paling cekap.');
+  if (!concl.length) concl.push('Tempoh ini berjalan tanpa perubahan ketara melebihi ambang.');
+  const li=(t,arr)=>arr.length?'<div style="margin:2px 0"><span style="font-weight:800">'+t+'</span><ul style="margin:2px 0 6px;padding-left:18px;font-size:12.5px;color:var(--dim)">'+arr.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>':'';
+  // key takeaways ringkas
+  const take=[];
+  if (chgRes!=null) take.push('Results '+(chgRes>=0?'naik':'turun')+' vs tempoh sebelumnya'+(Math.abs(chgRes)>=5?' ('+(chgRes>0?'+':'')+chgRes.toFixed(0)+'%)':''));
+  if (pcpr && cpr && Math.abs((cpr-pcpr)/pcpr*100)>=5) take.push('Cost per result '+(cpr<pcpr?'membaik':'meningkat')+' — '+fmtRM(cpr)+' vs '+fmtRM(pcpr));
+  if (adRes.length>1 && adRes[0] && adRes[0].res>0){const s=adRes[0].res/(adRes.reduce((x,a)=>x+a.res,0)||1)*100; if(s>50) take.push('Satu creative terima majoriti hasil ('+s.toFixed(0)+'%)');}
+  const takeHtml = take.length ? '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px"><span style="font-weight:800">Key Takeaways</span><ul style="margin:4px 0 0;padding-left:18px;font-size:12.5px;color:var(--dim)">'+take.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>' : '';
+  return '<div class="tablewrap" style="margin-bottom:16px"><div class="thead">🤖 AI Weekly Analysis <span class="muted">utk laporan Jumaat — fakta, bukan tafsiran melampau</span></div>'
+    +'<div style="padding:12px 16px;font-size:12.5px">'
+    +li('FACT',facts)+li('OBSERVATION',obs)+li('CONCLUSION',concl)+li('RECOMMENDATION',rec)
+    +takeHtml
+    +'<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:11px;color:var(--faint)">Nota: analisis berdasarkan data sebenar tempoh ini sahaja. Tiada tuntutan seperti "audience suka" tanpa bukti data.</div>'
+    +'</div></div>';
+}
+function kpi(lb, vl, sb){ return '<div class="statcard'+(lb==='Amount Spent'||lb==='Results'?' accent':'')+'"><div class="lb">'+lb+'</div><div class="vl">'+vl+'</div><div class="sb">'+sb+'</div></div>'; }
+function budgetHealthHtml(fin, T, d){
   const bal = Number(fin.balance||0);
-  // anggap daily budget dari tree
-  let daily = 0;
+  let daily = 0, budgetNote='';
   if (dashData && dashData.tree.campaigns) for (const c of dashData.tree.campaigns){
     for (const as of (c.adSets||[])) daily += Number(((as.budget||{}).amount)||0);
   }
+  if (daily>0) budgetNote='anggaran gabungan budget ad set (RM'+fmtRM(daily)+'/hari)';
+  else budgetNote='budget harian tidak tersedia (ada di peringkat ad set?)';
   const daysLeft = daily>0 ? Math.floor(bal/daily) : null;
-  const pctUsed = T.spend ? Math.round(T.spend/(T.spend+bal)*100) : 0;
+  const pctUsed = (T.spend+bal)>0 ? Math.round(T.spend/(T.spend+bal)*100) : 0;
   let bar = '<div style="height:8px;background:#eee;border-radius:6px;overflow:hidden;margin:8px 0 6px"><div style="height:100%;width:'+Math.min(pctUsed,100)+'%;background:var(--accent);border-radius:6px"></div></div>';
-  return '<div style="font-size:20px;font-weight:700">'+fmtRM(bal)+'</div><div class="muted" style="font-size:11.5px">baki akaun</div>'+bar+'<div style="font-size:11.5px;color:var(--dim)">'+pctUsed+'% digunakan · '+(daysLeft!==null?('~'+daysLeft+' hari lagi (RM'+fmtRM(daily)+'/hari)'):'—')+'</div>';
+  return '<div style="font-size:20px;font-weight:700">'+fmtRM(bal)+'</div><div class="muted" style="font-size:11.5px">baki akaun</div>'+bar+'<div style="font-size:11.5px;color:var(--dim)">'+pctUsed+'% digunakan · '+(daysLeft!==null?('~'+daysLeft+' hari lagi'):'—')+'</div><div style="font-size:10px;color:var(--faint);margin-top:4px">'+budgetNote+'</div>';
 }
-function deliveryAlertsHtml(camps){
+function deliveryAlertsHtml(camps, d){
   let alerts = [];
   for (const c of (camps||[])){
-    if (c.status !== 'active') alerts.push({icon:'⏸', txt: esc(c.campaignName||'')+' — '+ (c.status||'')});
+    if (c.status !== 'active') alerts.push({icon:'⏸', txt: esc(c.campaignName||'')+' — '+(c.status||'')});
     if (c.reviewStatus && c.reviewStatus !== 'approved') alerts.push({icon:'⚠️', txt: esc(c.campaignName||'')+' — review: '+esc(c.reviewStatus)});
   }
-  const rows = (dashData&&dashData.insights&&dashData.insights.data)||[];
+  const rows = (d.insights&&d.insights.data)||[];
   for (const r of rows){
     const act = actVal(r.actions,'onsite_conversion.messaging_conversation_started_7d');
     const spend = Number(r.spend||0);
     if (spend > 50 && !act) alerts.push({icon:'📉', txt: esc(r.campaign_name||'')+' — spend tanpa hasil'});
+    if (spend > 20 && !act && Number(r.impressions||0) > 1000) alerts.push({icon:'🔍', txt: esc(r.campaign_name||'')+' — delivery tanpa hasil, perlu investigate'});
   }
-  if (!alerts.length) return '<div style="color:var(--faint);font-size:12.5px;padding:8px 2px">✅ Tiada alert — semua normal</div>';
+  if (!alerts.length) return '<div style="color:var(--faint);font-size:12.5px;padding:8px 2px">✅ All delivery looks normal.</div>';
   return alerts.slice(0,5).map(a=>'<div style="display:flex;gap:9px;padding:8px 6px;border-bottom:1px solid #f3f4f6;font-size:12.5px;align-items:center"><span>'+a.icon+'</span><span>'+a.txt+'</span></div>').join('');
 }
 function drawTrend(d){
   const svg = $('trendChart'); if (!svg) return;
-  // kumpul daily spend dari tree (campaign level)
   let daily = [];
-  for (const c of (d.tree.campaigns||[])) for (const day of (c.daily||[])) daily.push(day);
+  const di = (d.daily_insights && d.daily_insights.data) || [];
+  if (di.length) {
+    const byDay = {};
+    for (const r of di) {
+      const k = String(r.date_start || r.date || '');
+      if (!k) continue;
+      if (!byDay[k]) byDay[k] = { date_start: k, spend: 0, impressions: 0, clicks: 0, reach: 0, results: 0 };
+      byDay[k].spend += Number(r.spend || 0);
+      byDay[k].impressions += Number(r.impressions || 0);
+      byDay[k].clicks += Number(r.clicks || 0);
+      byDay[k].reach += Number(r.reach || 0);
+    }
+    daily = Object.values(byDay);
+  } else {
+    for (const c of (d.tree.campaigns || [])) for (const day of (c.daily || [])) daily.push(day);
+  }
   if (!daily.length){ svg.innerHTML='<text x="300" y="95" text-anchor="middle" fill="#9ca3af" font-size="12">Tiada data harian</text>'; return; }
   daily.sort((a,b)=>String(a.date_start||a.date).localeCompare(String(b.date_start||b.date)));
-  const W=600,H=190,padL=46,padR=10,padT=14,padB=26;
+  // metric pilihan
+  const metric = metaTrendMetric||'spend';
+  const val = day => {
+    if (metric==='spend') return +day.spend||0;
+    if (metric==='impr') return +day.impressions||0;
+    if (metric==='reach') return +day.reach||0;
+    if (metric==='clicks') return +day.clicks||0;
+    if (metric==='results') return +day.results||0;
+    if (metric==='ctr') return day.impressions? (day.clicks||0)/(+day.impressions)*100:0;
+    if (metric==='cpm') return day.impressions? (+day.spend||0)/(+day.impressions)*1000:0;
+    return +day.spend||0;
+  };
+  const W=600,H=190,padL=52,padR=12,padT=16,padB=28;
   const iw=W-padL-padR, ih=H-padT-padB;
-  const maxSp = Math.max(...daily.map(d=>Number(d.spend||0)), 10);
-  const pts = daily.map((d,i)=>{
-    const x = padL + (daily.length>1 ? i*(iw/(daily.length-1)) : iw/2);
-    const y = padT + ih - (Number(d.spend||0)/maxSp)*ih;
-    return [x,y,d];
+  const vals = daily.map(val);
+  const maxV = Math.max(...vals, 1) * 1.15;
+  svg.innerHTML='';
+  const ns='http://www.w3.org/2000/svg';
+  const mk=(tag,at)=>{const e=document.createElementNS(ns,tag);for(const k in at)e.setAttribute(k,at[k]);return e;};
+  for(let g=0;g<=3;g++){const y=padT+ih-g*ih/3;svg.appendChild(mk('line',{x1:padL,y1:y,x2:W-padR,y2:y,stroke:'#f0edea','stroke-width':1}));const tx=mk('text',{x:padL-6,y:y+4,'text-anchor':'end','font-size':9.5,fill:'#9ca3af'});tx.textContent = (metric==='ctr')? (maxV*g/3).toFixed(1)+'%' : (metric==='cpm')? 'RM'+Math.round(maxV*g/3) : Math.round(maxV*g/3).toLocaleString(); svg.appendChild(tx);}
+  const step=iw/Math.max(daily.length-1,1);
+  const bw=Math.min(30, step*0.5);
+  const fmtV = v => metric==='ctr'? v.toFixed(2)+'%' : metric==='cpm'? fmtRM(v) : (metric==='spend'? fmtRM(v) : Math.round(v).toLocaleString());
+  daily.forEach((x,i)=>{
+    const v=val(x); const cx=padL+i*step, bx=cx-bw/2;
+    const hh=Math.max(v/maxV*ih, 1.5);
+    svg.appendChild(mk('rect',{x:bx,y:padT+ih-hh,width:bw,height:hh,fill:'#f97316',rx:3,opacity:.9}));
+    const tx=mk('text',{x:cx,y:H-7,'text-anchor':'middle','font-size':8.5,fill:'#9ca3af'});tx.textContent=(x.date_start||x.date||'').slice(5);svg.appendChild(tx);
+    const vl=mk('text',{x:cx,y:padT+ih-hh-4,'text-anchor':'middle','font-size':8,fill:'#6b7280'});vl.textContent=fmtV(v);svg.appendChild(vl);
   });
-  // line path
-  let path = 'M'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L');
-  // grid lines
-  let g = '';
-  for (let i=0;i<=3;i++){ const gy = padT + ih*i/3; const val = maxSp*(1-i/3); g += '<line x1="'+padL+'" y1="'+gy+'" x2="'+(W-padR)+'" y2="'+gy+'" stroke="#f0f1f3" stroke-width="1"/>'; g += '<text x="'+(padL-6)+'" y="'+(gy+4)+'" text-anchor="end" fill="#9ca3af" font-size="10">'+fmtRM(val)+'</text>'; }
-  // area fill
-  const area = path + ' L'+pts[pts.length-1][0].toFixed(1)+','+(padT+ih)+' L'+pts[0][0].toFixed(1)+','+(padT+ih)+' Z';
-  let circles = '';
-  const labelEvery = Math.ceil(pts.length/8);
-  let labels = '';
-  pts.forEach((p,i)=>{
-    circles += '<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.6" fill="#e0784e"/>';
-    if (i%labelEvery===0 || i===pts.length-1){
-      const dstr = String(p[2].date_start||p[2].date||'');
-      labels += '<text x="'+p[0]+'" y="'+(H-8)+'" text-anchor="middle" fill="#9ca3af" font-size="9">'+(dstr?dstr.slice(5):'')+'</text>';
-    }
-  });
-  svg.innerHTML = g
-    + '<path d="'+area+'" fill="rgba(224,120,78,.08)"/>'
-    + '<path d="'+path+'" fill="none" stroke="#e0784e" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
-    + circles + labels;
+  if(daily.length>1){let pl='';daily.forEach((x,i)=>{const v=val(x),cx=padL+i*step;pl+=(i?',':'')+cx+','+(padT+ih-(v/maxV)*ih);});svg.appendChild(mk('polyline',{points:pl,fill:'none',stroke:'#c2410c','stroke-width':1.4}));}
+  const cap=mk('text',{x:padL,y:11,'font-size':9.5,fill:'#6b7280'});cap.textContent = {'spend':'Amount Spent','results':'Results','impr':'Impressions','reach':'Reach','ctr':'CTR (all)','cpm':'CPM'}[metric]||metric; svg.appendChild(cap);
 }
 function applyDates(){
-  const f = $('mFrom').value, t = $('mTo').value;
-  if (f && t && f<=t){ metaFrom=f; metaTo=t; $('content').innerHTML='<div style="color:var(--faint);padding:40px;text-align:center">Memuat…</div>'; loadDash(); }
+  const f=$('mFrom'), t=$('mTo');
+  if (f && t && f.value<=t.value){ metaFrom=f.value; metaTo=t.value; loadDash(); }
 }
-
+async function exportPdf(){
+  const btn=$('pdfBtn'); if (!btn) return;
+  if (!dashData) { alert('Data belum dimuat — tunggu sebentar & cuba lagi.'); return; }
+  const orig=btn.textContent;
+  btn.disabled=true; btn.textContent='⏳ Generating...';
+  try{
+    const ctx = {
+      accountName: metaAcctName, clientName: metaAcctName,
+      adAccountId: metaAcct, from: metaFrom, to: metaTo,
+      trendMetric: metaTrendMetric||'spend'
+    };
+    const resp = await fetch('/api/meta/pdf', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ context: ctx, data: dashData })
+    });
+    if (!resp.ok){
+      let msg='Unable to generate the PDF report. Please try again.';
+      try{ const e=await resp.json(); if(e&&e.error) msg+=' ('+e.error+')'; }catch(_){}
+      throw new Error(msg);
+    }
+    const blob = await resp.blob();
+    let fname = resp.headers.get('X-PDF-Filename') || '';
+    if (!fname){
+      const cd = resp.headers.get('Content-Disposition')||'';
+      const m = cd.match(/filename\*=UTF-8''([^;]+)/);
+      fname = m ? decodeURIComponent(m[1]) : (metaAcctName||'client').replace(/[^A-Za-z0-9]+/g,'-')+'_Meta-Ads-Report.pdf';
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1500);
+  }catch(err){
+    alert('Unable to generate the PDF report. Please try again.' + (err&&err.message?('\n\n'+err.message):''));
+  }finally{
+    btn.disabled=false; btn.textContent=orig;
+  }
+}
+function loadDashPdf(){ /* helper reserved */ }
+/* ===== Performance Marketing (PM) v2 — funnel diagnostics ===== */
+let pmData = null;
+let pmSort = 'spend';
+let pmGran = 'daily';   // daily | weekly | monthly (trend aggregation)
+let pmDateMode = '7d';  // 7d | 30d | thisMonth | prevMonth | custom
+function viewPM(){
+  setNav('pm'); $('t1').textContent='Performance Mktg'; $('t2').textContent='business outcome > media buying';
+  $('sw').style.display='none';
+  $('content').innerHTML = '<div style="padding:60px;text-align:center;color:var(--faint)">Muat data…</div>';
+  const end = new Date(); const start = new Date(); start.setDate(end.getDate()-6);
+  const fmtD = d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  pmFrom = fmtD(start); pmTo = fmtD(end);
+  loadPM();
+}
+let pmFrom='', pmTo='';
+function pmDateRange(mode){
+  const fmtD = d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const now = new Date(); let s = new Date(now);
+  if(mode==='7d'){s.setDate(now.getDate()-6);}
+  else if(mode==='30d'){s.setDate(now.getDate()-29);}
+  else if(mode==='thisMonth'){s=new Date(now.getFullYear(),now.getMonth(),1);}
+  else if(mode==='prevMonth'){s=new Date(now.getFullYear(),now.getMonth()-1,1);const e=new Date(now.getFullYear(),now.getMonth(),0);pmTo=fmtD(e);pmFrom=fmtD(s);return;}
+  pmFrom=fmtD(s); pmTo=fmtD(now);
+}
+function pmPreset(m){
+  pmDateMode=m; pmDateRange(m);
+  const f=$('pmFrom'),t=$('pmTo'); if(f)f.value=pmFrom; if(t)t.value=pmTo;
+  loadPM();
+}
+async function loadPM(){
+  try{
+    const r = await fetch('/api/meta/pm?from='+pmFrom+'&to='+pmTo);
+    const d = await r.json();
+    pmData = d; renderPM();
+  }catch(e){
+    $('content').innerHTML='<div style="color:#c0392b;padding:40px;text-align:center">Gagal muat: '+esc(e.message)+'</div>';
+  }
+}
+function pmAgg(rows){
+  const T={spend:0,impr:0,reach:0,clicks:0,link:0,wa:0,firstReply:0,purchases:0,leads:0,landing:0,atc:0,checkout:0,regs:0,donate:0,appt:0};
+  for(const r of rows){
+    T.spend+=+r.spend||0; T.impr+=+r.impressions||0; T.reach+=+r.reach||0;
+    T.clicks+=+r.clicks||0; T.link+=+r.inline_link_clicks||0;
+    for(const a of (r.actions||[])){
+      const t=a.action_type||'';
+      if(t.includes('messaging_conversation_started')) T.wa+=+a.value||0;
+      else if(t.includes('messaging_first_reply')) T.firstReply+=+a.value||0;
+      else if(t==='purchase') T.purchases+=+a.value||0;
+      else if(t==='lead') T.leads+=+a.value||0;
+      else if(t==='landing_page_view') T.landing+=+a.value||0;
+      else if(t==='add_to_cart') T.atc+=+a.value||0;
+      else if(t==='initiate_checkout') T.checkout+=+a.value||0;
+      else if(t==='complete_registration') T.regs+=+a.value||0;
+      else if(t==='donate') T.donate+=+a.value||0;
+    }
+  }
+  return T;
+}
+function pctChg(c,p){ if(p==null||p===0) return null; return (c-p)/p*100; }
+function deltaTag(cur,prev,opt={}){
+  if(prev==null||prev===0||cur==null){return '<span class="d flat">N/A</span>';}
+  const chg=pctChg(cur,prev); if(chg==null) return '<span class="d flat">—</span>';
+  const inv=opt.invert;
+  let cls='flat',arr='';
+  if(chg>0.05){cls=inv?'down':'up';arr='▲';} else if(chg<-0.05){cls=inv?'up':'down';arr='▼';}
+  return '<span class="d '+cls+'">'+arr+' '+Math.abs(chg).toFixed(1)+'%</span>';
+}
+function pmKpiHtml(label,val,deltaHtml,note,sub){
+  return '<div class="pmkpi"><div class="v">'+val+'</div><div class="l">'+label+'</div>'+deltaHtml+(sub?'<div style="font-size:10px;color:var(--faint);margin-top:2px">prev: '+sub+'</div>':'')+(note?'<div style="font-size:10.5px;color:var(--faint);margin-top:4px">'+note+'</div>':'')+'</div>';
+}
+function fmtRMC(n){return n==null||isNaN(n)?'N/A':'RM'+Number(n).toLocaleString('en-MY',{minimumFractionDigits:0,maximumFractionDigits:0});}
+function naCard(label,why){return '<div class="pmkpi" style="opacity:.75"><div class="v na-tag" style="font-size:18px">N/A</div><div class="l">'+label+'</div><div style="font-size:10.5px;color:var(--faint);margin-top:4px">'+why+'</div></div>';}
+/* ===== helpers funnel stage ===== */
+function stageVol(cur,prev,curRate,prevRate,curNote,prevNote){
+  // return html untuk satu stage
+}
+function convPct(a,b){ if(!b||!a) return null; return a/b*100; }
+function fmtRate(x,dec){ return x==null?'—':x.toFixed(dec==null?1:dec)+'%'; }
+function rateDelta(curR,prevR,inv){
+  if(curR==null||prevR==null) return '<span style="color:var(--faint);font-size:11px">prev '+fmtRate(prevR,2)+'</span>';
+  const d=pctChg(curR,prevR); if(d==null) return '<span style="color:var(--faint);font-size:11px">prev '+fmtRate(prevR,2)+'</span>';
+  const bad=(!inv&&d<-5)||(inv&&d>5); const good=(!inv&&d>5)||(inv&&d<-5);
+  const col=bad?'#b91c1c':good?'#047857':'var(--dim)';
+  const arr=bad?'▼':good?'▲':'•';
+  return '<span style="color:var(--faint);font-size:11px">prev '+fmtRate(prevR,2)+'</span> <span style="color:'+col+';font-size:11px;font-weight:700">'+arr+' '+(Math.abs(d)).toFixed(1)+'%</span>';
+}
+function pmStage(nm,vol,rateHtml,prevNote,volPrev){
+  return '<div class="fstage"><div><div class="fn">'+nm+'</div>'+(rateHtml?'<div class="fc">'+rateHtml+'</div>':'')+'</div><div style="text-align:right"><div class="fv">'+(vol==null?'<span class="na-tag">N/A</span>':fmtN(vol))+'</div>'+(prevNote?'<div class="fd">'+prevNote+'</div>':'')+'</div></div>';
+}
+function renderPM(){
+  const d=pmData; if(!d) return;
+  const C=pmAgg((d.current||{}).data||[]);
+  const P=pmAgg((d.previous||{}).data||[]);
+  const fin=d.finance||{};
+  const daily=(d.daily||{}).data||[];
+  let h='<div class="wrap">';
+  /* header + date presets */
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 10px">';
+  h+='<div style="margin-right:6px"><div class="pt" style="font-size:17px">📊 Performance Marketing</div><div class="pd" style="margin:0">JFR Auto · '+d.from+' → '+d.to+'</div></div>';
+  h+='<div class="grow" style="flex:1"></div>';
+  h+='<button class="sortbtn'+(pmDateMode==='7d'?' on':'')+'" onclick="pmPreset(\'7d\')">7 hari</button>';
+  h+='<button class="sortbtn'+(pmDateMode==='30d'?' on':'')+'" onclick="pmPreset(\'30d\')">30 hari</button>';
+  h+='<button class="sortbtn'+(pmDateMode==='thisMonth'?' on':'')+'" onclick="pmPreset(\'thisMonth\')">Bulan ini</button>';
+  h+='<button class="sortbtn'+(pmDateMode==='prevMonth'?' on':'')+'" onclick="pmPreset(\'prevMonth\')">Bulan lepas</button>';
+  h+='<input type="date" id="pmFrom" value="'+pmFrom+'" class="dte"> <span style="color:var(--faint)">→</span> <input type="date" id="pmTo" value="'+pmTo+'" class="dte">';
+  h+='<button class="refresh" onclick="pmDateMode=\'custom\';pmFrom=pmFromEl();pmTo=pmToEl();loadPM()">Tukar</button></div>';
+  /* period compare strip */
+  h+='<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--faint);margin-bottom:6px">';
+  h+='<span>Current: <b>'+d.from+' → '+d.to+'</b></span><span>Previous: <b>'+d.prev_from+' → '+d.prev_to+'</b></span>';
+  h+='</div>';
+  /* ===== 1. EXECUTIVE OVERVIEW ===== */
+  const cpl=C.wa?C.spend/C.wa:null; const pCpl=P.wa?P.spend/P.wa:null;
+  const cpm=C.impr?C.spend/C.impr*1000:null; const pCpm=P.impr?P.spend/P.impr*1000:null;
+  const ctrAll=C.impr?C.clicks/C.impr*100:null; const pCtrAll=P.impr?P.clicks/P.impr*100:null;
+  const ctrL=C.impr?C.link/C.impr*100:null; const pCtrL=P.impr?P.link/P.impr*100:null;
+  const cpcL=C.link?C.spend/C.link:null; const pCpcL=P.link?P.spend/P.link:null;
+  const freq=C.impr&&C.reach?C.impr/C.reach:null; const pFreq=P.impr&&P.reach?P.impr/P.reach:null;
+  h+='<div class="pmsec"><h3>Executive Overview</h3><div class="sub">Current vs previous period — perniagaan (lead-gen): setakat WhatsApp conversion</div></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:10px">';
+  h+=pmKpiHtml('Ad Spend',fmtRMC(C.spend),deltaTag(C.spend,P.spend),'kos iklan',fmtRMC(P.spend));
+  h+=pmKpiHtml('Revenue','<span class="na-tag">N/A</span>','<span class="d flat">—</span>','awaiting e-commerce/CRM');
+  h+=pmKpiHtml('ROAS','<span class="na-tag">N/A</span>','<span class="d flat">—</span>','perlu revenue');
+  h+=pmKpiHtml('Purchases','<span class="na-tag">N/A</span>','<span class="d flat">—</span>','tiada pixel purchase');
+  h+=pmKpiHtml('CPA (per WA)',cpl!=null?fmtRMC(cpl):'N/A',deltaTag(cpl,pCpl,{invert:true}),'kos per WhatsApp conv',fmtRMC(pCpl));
+  h+=pmKpiHtml('AOV','<span class="na-tag">N/A</span>','<span class="d flat">—</span>','perlu revenue');
+  h+=pmKpiHtml('WA Conversions',C.wa,deltaTag(C.wa,P.wa),'hasil utama lead-gen',fmtN(P.wa));
+  h+=pmKpiHtml('Qualified Leads','<span class="na-tag">N/A</span>','<span class="d flat">—</span>','awaiting CRM');
+  h+='</div>';
+  /* delivery strip */
+  h+='<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--dim);margin-top:10px;padding:8px 2px">';
+  h+='<span>CPM <b>'+fmtRMC(cpm)+'</b> '+deltaTag(cpm,pCpm,{invert:true})+'</span>';
+  h+='<span>CTR all <b>'+fmtRate(ctrAll,2)+'</b> '+deltaTag(ctrAll,pCtrAll)+'</span>';
+  h+='<span>CTR link <b>'+fmtRate(ctrL,2)+'</b> '+deltaTag(ctrL,pCtrL)+'</span>';
+  h+='<span>CPC link <b>'+fmtRMC(cpcL)+'</b></span>';
+  h+='<span>Reach <b>'+fmtN(C.reach)+'</b></span><span>Frequency <b>'+(freq?freq.toFixed(2)+'x':'—')+'</b> '+deltaTag(freq,pFreq)+'</span>';
+  h+='<span>Baki akaun <b>'+fmtRMC(fin.balance)+'</b></span>';
+  h+='</div>';
+  /* ===== 2. PERFORMANCE TREND ===== */
+  h+='<div class="pmsec"><h3>Performance Trend</h3><div class="sub">Ad Spend mengikut masa — revenue line akan muncul bila integrasi e-commerce disambung</div>';
+  h+='<div style="margin:6px 0"><button class="sortbtn'+(pmGran==='daily'?' on':'')+'" onclick="pmGran=\'daily\';drawPMTrend((pmData.daily||{}).data||[]);updateGranBtns()">Daily</button>';
+  h+='<button class="sortbtn'+(pmGran==='weekly'?' on':'')+'" onclick="pmGran=\'weekly\';drawPMTrend((pmData.daily||{}).data||[]);updateGranBtns()">Weekly</button>';
+  h+='<button class="sortbtn'+(pmGran==='monthly'?' on':'')+'" onclick="pmGran=\'monthly\';drawPMTrend((pmData.daily||{}).data||[]);updateGranBtns()">Monthly</button></div></div>';
+  h+='<div class="tablewrap" style="max-width:920px"><div style="padding:14px 18px"><svg id="pmTrend" viewBox="0 0 640 190" style="width:100%;height:auto;display:block"></svg></div></div>';
+  /* ===== 3. FULL MARKETING FUNNEL (e-comm ready) ===== */
+  h+='<div class="pmsec"><h3>Full Marketing Funnel <span style="font-size:10.5px;color:var(--faint);font-weight:400">(e-commerce: Dians Signature & lain-lain)</span></h3><div class="sub">Stage N/A = data source belum integrate. JFR Auto = lead-gen, jadi kebanyakan stage e-commerce kosong.</div></div>';
+  h+='<div class="funnel" style="max-width:900px">';
+  const ctrAllR=convPct(C.clicks,C.impr), pCtrAllR=convPct(P.clicks,P.impr);
+  h+=pmStage('IMPRESSIONS',C.impr,'', 'prev '+fmtN(P.impr));
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('LINK CLICKS',C.clicks,'CTR all '+fmtRate(ctrAllR,2)+' '+rateDelta(ctrAllR,pCtrAllR),'prev '+fmtN(P.clicks));
+  h+='<div class="fconn">↓</div>';
+  const cLr=convPct(C.link,C.clicks),pCLr=convPct(P.link,P.clicks);
+  h+=pmStage('LINK CLICKS (ke WA)',C.link,'link/all '+fmtRate(cLr,0)+' '+rateDelta(cLr,pCLr),'prev '+fmtN(P.link));
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('PRODUCT VIEWS','<span class="na-tag">N/A</span>','awaiting GA4/Shopify — click→view','');
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('ADD TO CART','<span class="na-tag">N/A</span>','awaiting pixel event','');
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('CHECKOUT','<span class="na-tag">N/A</span>','awaiting pixel event','');
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('PURCHASE','<span class="na-tag">N/A</span>','awaiting pixel purchase','');
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('REVENUE','<span class="na-tag">N/A</span>','awaiting e-commerce','');
+  h+='</div>';
+  /* ===== 4. WHATSAPP / LEAD FUNNEL ===== */
+  h+='<div class="pmsec"><h3>WhatsApp / Lead Funnel <span style="font-size:10.5px;color:var(--faint);font-weight:400">(aktif — JFR Auto)</span></h3><div class="sub">Di mana lead funnel bocor? Conversion rate setiap stage + banding previous period.</div></div>';
+  h+='<div class="funnel" style="max-width:900px">';
+  h+=pmStage('IMPRESSIONS',C.impr,'','prev '+fmtN(P.impr));
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('LINK CLICKS',C.link,'CTR link '+fmtRate(ctrL,2)+' '+rateDelta(ctrL,pCtrL),'prev '+fmtN(P.link));
+  h+='<div class="fconn">↓</div>';
+  const convWA=convPct(C.wa,C.link), pConvWA=convPct(P.wa,P.link);
+  const convWAClick=convPct(C.wa,C.clicks), pConvWAClick=convPct(P.wa,P.clicks);
+  h+=pmStage('WHATSAPP CONVERSATIONS',C.wa,'link→WA '+fmtRate(convWA,1)+' '+rateDelta(convWA,pConvWA),'prev '+fmtN(P.wa));
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('QUALIFIED LEADS','<span class="na-tag">N/A</span>','awaiting CRM/WA sales tracking — conv→qualified','');
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('PURCHASE / SALES','<span class="na-tag">N/A</span>','awaiting sales data — qualified→purchase','');
+  h+='<div class="fconn">↓</div>';
+  h+=pmStage('REVENUE','<span class="na-tag">N/A</span>','awaiting sales data','');
+  h+='</div>';
+  h+='<div style="max-width:900px;margin-top:8px;font-size:11.5px;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap"><span>Klik→WA: <b>'+fmtRate(convWAClick,1)+'</b> '+rateDelta(convWAClick,pConvWAClick)+'</span><span>CPL: <b>'+fmtRMC(cpl)+'</b> '+deltaTag(cpl,pCpl,{invert:true})+'</span><span>Note: CPL murah ≠ lead berkualiti — perlukan qualified rate dari CRM</span></div>';
+  /* ===== 5. CHANNEL ===== */
+  h+='<div class="pmsec"><h3>Channel Performance</h3><div class="sub">Hanya channel dengan data sebenar dipaparkan</div></div>';
+  h+='<div class="tablewrap" style="max-width:1180px"><table class="tbl"><tr><th>Channel</th><th class="num">Spend</th><th class="num">Impr</th><th class="num">Reach</th><th class="num">Freq</th><th class="num">CPM</th><th class="num">CTR lnk</th><th class="num">CPC lnk</th><th class="num">WA</th><th class="num">CPL</th><th class="num">Purchases</th><th class="num">Revenue</th><th class="num">ROAS</th></tr>';
+  h+='<tr><td><b>Meta Ads</b> <span style="font-size:10px;color:var(--faint)">(JFR Auto Ad)</span></td><td class="num">'+fmtRMC(C.spend)+'</td><td class="num">'+fmtN(C.impr)+'</td><td class="num">'+fmtN(C.reach)+'</td><td class="num">'+(freq?freq.toFixed(2)+'x':'—')+'</td><td class="num">'+fmtRMC(cpm)+'</td><td class="num">'+fmtRate(ctrL,2)+'</td><td class="num">'+fmtRMC(cpcL)+'</td><td class="num">'+fmtN(C.wa)+'</td><td class="num">'+(cpl!=null?fmtRMC(cpl):'—')+'</td><td class="num na-tag">N/A</td><td class="num na-tag">N/A</td><td class="num na-tag">N/A</td></tr>';
+  h+='<tr><td>Google Ads</td><td class="num na-tag" colspan="12">Awaiting data integration</td></tr>';
+  h+='<tr><td>TikTok Ads</td><td class="num na-tag" colspan="12">Awaiting data integration</td></tr>';
+  h+='<tr><td>Organic / Direct / Email</td><td class="num na-tag" colspan="12">Awaiting data integration</td></tr>';
+  h+='</table></div>';
+  /* ===== 6. CAMPAIGN ===== */
+  h+='<div class="pmsec"><h3>Campaign Performance</h3><div class="sub">Campaign mana menghasilkan value (bukan sekadar clicks)</div>';
+  h+='<div style="margin:6px 0"><button class="sortbtn" onclick="pmCampSort(\'spend\')">Spend</button><button class="sortbtn" onclick="pmCampSort(\'wa\')">WA Results</button><button class="sortbtn" onclick="pmCampSort(\'cpl\')">CPL</button><button class="sortbtn" onclick="pmCampSort(\'ctr\')">CTR Link</button><button class="sortbtn" onclick="pmCampSort(\'roas\')">ROAS</button></div></div>';
+  h+='<div id="pmCampTable"></div>';
+  /* ===== 7. AD SET ===== */
+  h+='<div class="pmsec"><h3>Ad Set / Audience Performance</h3><div class="sub">Jangan nilai audience dari satu metric — check gabungan (CPL, CTR, frequency)</div></div>';
+  h+='<div id="pmAdsetTable" class="tablewrap" style="max-width:1150px"></div>';
+  /* ===== 8. CREATIVE ===== */
+  h+='<div class="pmsec"><h3>Creative Performance</h3><div class="sub">Winning vs losing creative — asas scaling decision. Metadata creative (hook/angle) belum tersedia.</div></div>';
+  h+='<div id="pmCreativeTable" class="tablewrap" style="max-width:1180px"></div>';
+  /* ===== 9-12. Product/Customer/Profit ===== */
+  h+='<div class="pmsec"><h3>Product · Customer · Profitability</h3><div class="sub">Semua memerlukan integrasi data perniagaan (Shopify/CRM/COGS) — dipaparkan sebagai N/A sehingga wujud</div></div>';
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px">';
+  h+='<div class="insight-card"><div style="font-weight:700;margin-bottom:6px">📦 Product Performance</div><div class="na-tag">Awaiting e-commerce integration. Akan papar: units, revenue, AOV, ROAS per product, new vs returning.</div></div>';
+  h+='<div class="insight-card"><div style="font-weight:700;margin-bottom:6px">📞 Sales / Lead Quality</div><div class="na-tag">Awaiting CRM/WA sales data. Akan papar: Leads→Qualified→Contacted→Quoted→Purchased + qualified lead rate & CPA sebenar.</div></div>';
+  h+='<div class="insight-card"><div style="font-weight:700;margin-bottom:6px">👥 Customer</div><div class="na-tag">Awaiting data. New vs returning, repeat rate, CAC vs LTV belum tersedia.</div></div>';
+  h+='<div class="insight-card"><div style="font-weight:700;margin-bottom:6px">💰 Profitability</div><div class="na-tag">Awaiting COGS/kos. ROAS ≠ profit — tanpa kos sebenar, tiada label profitable.</div></div>';
+  h+='</div>';
+  /* ===== 13. ALERTS ===== */
+  h+='<div class="pmsec"><h3>Performance Alerts</h3><div class="sub">Current vs previous period · ambang: CPL/CTR/hasil ±10% · spend 5%</div></div><div id="pmAlerts"></div>';
+  /* ===== 14. INSIGHTS ===== */
+  h+='<div class="pmsec"><h3>💡 Insights & Recommended Actions</h3><div class="sub">Data → Information → Insight → Decision</div></div><div id="pmInsights"></div>';
+  h+='</div>';
+  $('content').innerHTML=h;
+  drawPMTrend(daily);
+  renderPMAlerts(C,P);
+  renderPMInsights(C,P);
+  renderPMCamps((d.current||{}).data||[]);
+  renderPMAdsets((d.current||{}).data||[]);
+  renderPMCreatives((d.current||{}).data||[]);
+}
+function updateGranBtns(){document.querySelectorAll('.sortbtn').forEach(b=>b.classList.toggle('on',b.textContent.toLowerCase()===pmGran));}
+function pmFromEl(){const el=$('pmFrom');return el?el.value:pmFrom;}
+function pmToEl(){const el=$('pmTo');return el?el.value:pmTo;}
+function pmGranAgg(daily){
+  const byDay={};
+  for(const r of daily){const k=String(r.date_start||r.date||'');if(!k)continue;if(!byDay[k])byDay[k]={d:k,spend:0,wa:0};byDay[k].spend+=+r.spend||0;}
+  let arr=Object.values(byDay).sort((a,b)=>a.d.localeCompare(b.d));
+  if(pmGran==='weekly'){
+    const out=[]; let cur=null;
+    for(const x of arr){const wk=x.d.slice(0,7); if(!cur||cur.wk!==wk){cur={d:x.d,wk,label:'w/c '+x.d.slice(5),spend:0};out.push(cur);}cur.spend+=x.spend;}
+    return out;
+  }
+  if(pmGran==='monthly'){
+    const out=[]; let cur=null;
+    for(const x of arr){const mo=x.d.slice(0,7); if(!cur||cur.mo!==mo){cur={d:x.d,mo,label:x.d.slice(0,7),spend:0};out.push(cur);}cur.spend+=x.spend;}
+    return out;
+  }
+  return arr;
+}
+function drawPMTrend(daily){
+  const svg=$('pmTrend'); if(!svg)return;
+  const arr=pmGranAgg(daily);
+  if(!arr.length){svg.innerHTML='<text x="320" y="90" text-anchor="middle" fill="#9ca3af" font-size="12">Tiada data harian</text>';return;}
+  const W=640,H=190,padL=64,padR=18,padT=18,padB=30;
+  const iw=W-padL-padR, ih=H-padT-padB;
+  const maxV=Math.max(...arr.map(x=>x.spend),10);
+  svg.innerHTML='';
+  const ns='http://www.w3.org/2000/svg';
+  const mk=(tag,at)=>{const e=document.createElementNS(ns,tag);for(const k in at)e.setAttribute(k,at[k]);return e;};
+  for(let g=0;g<=3;g++){const y=padT+ih-g*ih/3;svg.appendChild(mk('line',{x1:padL,y1:y,x2:W-padR,y2:y,stroke:'#e5e7eb','stroke-width':1}));const tx=mk('text',{x:padL-6,y:y+4,'text-anchor':'end','font-size':10,fill:'#9ca3af'});tx.textContent='RM'+Math.round(maxV*g/3);svg.appendChild(tx);}
+  const step=iw/Math.max(arr.length-1,1);
+  const bw=Math.min(38,step*0.55);
+  arr.forEach((x,i)=>{
+    const cx=padL+i*step, bx=cx-bw/2;
+    const hh=Math.max((x.spend/maxV)*ih,2);
+    svg.appendChild(mk('rect',{x:bx,y:padT+ih-hh,width:bw,height:hh,fill:'#f97316',rx:4}));
+    const lb=mk('text',{x:cx,y:H-6,'text-anchor':'middle','font-size':9,fill:'#9ca3af'});lb.textContent=x.label||x.d.slice(5);svg.appendChild(lb);
+    const vl=mk('text',{x:cx,y:padT+ih-hh-5,'text-anchor':'middle','font-size':9,fill:'#6b7280'});vl.textContent=Math.round(x.spend);svg.appendChild(vl);
+  });
+  if(arr.length>1){let pl='';arr.forEach((x,i)=>{const cx=padL+i*step;pl+=(i?',':'')+cx+','+(padT+ih-(x.spend/maxV)*ih);});svg.appendChild(mk('polyline',{points:pl,fill:'none',stroke:'#c2410c','stroke-width':1.6}));}
+  const cap=mk('text',{x:padL,y:12,'font-size':10,fill:'#6b7280'});cap.textContent='Ad Spend harian (RM) — revenue line akan muncul bila integrasi wujud';svg.appendChild(cap);
+}
+/* ===== Alerts (current vs prev, threshold 10%) ===== */
+function renderPMAlerts(C,P){
+  const el=$('pmAlerts');if(!el)return;
+  let A=[];
+  const ctrAll=C.impr?C.clicks/C.impr*100:0, pCtr=P.impr?P.clicks/P.impr*100:0;
+  const chgCtr=pctChg(ctrAll,pCtr);
+  if(chgCtr!=null&&chgCtr<-10)A.push({s:'yellow',t:'CTR menurun',ev:'CTR '+ctrAll.toFixed(2)+'% vs '+pCtr.toFixed(2)+'% ('+chgCtr.toFixed(1)+'%)'});
+  if(chgCtr!=null&&chgCtr>10)A.push({s:'green',t:'CTR meningkat',ev:'CTR '+ctrAll.toFixed(2)+'% vs '+pCtr.toFixed(2)+'% (+'+chgCtr.toFixed(1)+'%)'});
+  const cpl=C.wa?C.spend/C.wa:null, pcpl=P.wa?P.spend/P.wa:null;
+  const chgCpl=pctChg(cpl,pcpl);
+  if(chgCpl!=null&&chgCpl>10)A.push({s:'yellow',t:'CPL naik',ev:'CPL '+fmtRMC(cpl)+' vs '+fmtRMC(pcpl)+' (+'+chgCpl.toFixed(1)+'%)'});
+  if(chgCpl!=null&&chgCpl<-10)A.push({s:'green',t:'CPL turun',ev:'CPL '+fmtRMC(cpl)+' vs '+fmtRMC(pcpl)+' ('+chgCpl.toFixed(1)+'%)'});
+  const chgSp=pctChg(C.spend,P.spend), chgWa=pctChg(C.wa,P.wa);
+  if(chgSp!=null&&chgWa!=null&&chgSp>5&&chgWa<-5)A.push({s:'red',t:'Spend naik tapi hasil turun',ev:'Spend +'+chgSp.toFixed(0)+'% · WA '+chgWa.toFixed(0)+'% — efficiency jatuh'});
+  if(chgWa!=null&&chgWa>15)A.push({s:'green',t:'WA results meningkat',ev:'+'+chgWa.toFixed(0)+'% vs previous period'});
+  if(chgWa!=null&&chgWa<-15)A.push({s:'yellow',t:'WA results menurun',ev:chgWa.toFixed(0)+'% vs previous period — needs investigation'});
+  const cpm=C.impr?C.spend/C.impr*1000:0, pCpm=P.impr?P.spend/P.impr*1000:0;
+  const chgCpm=pctChg(cpm,pCpm);
+  if(chgCpm!=null&&chgCpm>15)A.push({s:'yellow',t:'CPM naik',ev:'CPM '+fmtRMC(cpm)+' vs '+fmtRMC(pCpm)+' (+'+chgCpm.toFixed(1)+'%) — traffic makin mahal?'});
+  const freq=C.impr&&C.reach?C.impr/C.reach:0, pFreq=P.impr&&P.reach?P.impr/P.reach:0;
+  const chgF=pctChg(freq,pFreq);
+  if(chgF!=null&&chgF>20&&freq>3)A.push({s:'yellow',t:'Frequency tinggi & naik',ev:'Freq '+freq.toFixed(2)+'x vs '+pFreq.toFixed(2)+'x (+'+chgF.toFixed(0)+'%) — possible creative fatigue'});
+  if(!A.length)A.push({s:'green',t:'Tiada isu melebihi ambang',ev:'Semua metrik dalam julat ±10% (CPL/CTR/hasil) — pantau seperti biasa'});
+  let h='';
+  for(const a of A){h+='<div class="insight-card alert-'+a.s+'"><div style="font-weight:800;font-size:13px">'+(a.s==='red'?'🔴':a.s==='yellow'?'🟡':'🟢')+' '+esc(a.t)+'</div><div style="font-size:12px;color:var(--dim);margin-top:3px">Evidence: '+esc(a.ev)+'</div></div>';}
+  el.innerHTML=h;
+}
+/* ===== Insights: ISSUE → EVIDENCE → DIAGNOSIS → ACTION → KPI ===== */
+function renderPMInsights(C,P){
+  const el=$('pmInsights');if(!el)return;
+  const rows=(pmData.current||{}).data||[];
+  const ctrAll=C.impr?C.clicks/C.impr*100:0, pCtr=P.impr?P.clicks/P.impr*100:0;
+  const chgCtr=pctChg(ctrAll,pCtr);
+  const cpl=C.wa?C.spend/C.wa:null, pcpl=P.wa?P.spend/P.wa:null;
+  const chgCpl=pctChg(cpl,pcpl);
+  const chgWa=pctChg(C.wa,P.wa);
+  const freq=C.impr&&C.reach?C.impr/C.reach:0;
+  let h='';
+  const ic=(issue,sev,ev,diag,act,kpi)=>{
+    h+='<div class="insight-card" style="border-left:4px solid '+(sev==='red'?'#dc2626':sev==='yellow'?'#d97706':'#059669')+'">'
+      +'<div style="font-weight:800;font-size:13px">'+(sev==='red'?'🔴':sev==='yellow'?'🟡':'🟢')+' '+esc(issue)+'</div>'
+      +'<div style="font-size:12px;color:var(--dim);margin-top:5px"><b>🔎 Evidence:</b> '+esc(ev)+'</div>'
+      +'<div style="font-size:12px;color:var(--dim);margin-top:2px"><b>🧠 Possible diagnosis:</b> '+esc(diag)+'</div>'
+      +'<div style="font-size:12px;color:var(--dim);margin-top:2px"><b>🛠 Recommended action:</b> '+esc(act)+'</div>'
+      +'<div style="font-size:12px;color:var(--dim);margin-top:2px"><b>🎯 KPI to monitor:</b> '+kpi+'</div>'
+      +'</div>';
+  };
+  /* winning creative */
+  let best=null;for(const r of rows){let w=0;for(const ac of(r.actions||[])){if((ac.action_type||'').includes('messaging_conversation'))w+=+ac.value||0;}if(!best||w>(best.wa||0))best={name:r.ad_name,wa:w,spend:+r.spend||0};}
+  if(best&&best.wa>0){
+    ic('Winning creative: '+best.name,'green',
+       best.wa+' WhatsApp results · spend '+fmtRMC(best.spend)+(cpl?(' · CPL '+fmtRMC(best.wa?best.spend/best.wa:null)):''),
+       'Creative ini paling cekap tukar spend → hasil (data kukuh: hasil sebenar).',
+       'Pertimbang tambah budget / clone angle + hook video ini untuk variasi baru. Jika scale, pantau CPL — jangan biar naik >10%.',
+       'CPL creative · frequency · CTR link');
+  }
+  if(chgCtr!=null&&chgCtr<-10){
+    ic('CTR link menurun','yellow',
+       'CTR link '+ctrL()+ '% vs '+pCtrL()+'%'+(freq?(' · frequency kini '+freq.toFixed(2)+'x'):''),
+       'Possible creative fatigue atau audience saturation (perlu data placement/audience untuk sahkan). BUKAN root cause muktamad.',
+       'Semak: (1) frequency per ad — tinggi? (2) placement mana CTR jatuh? (3) creative dah lama tayang? Kemudian test variasi baru.',
+       'CTR link · frequency · CPL');
+  } else if(chgWa!=null&&chgWa<-15){
+    ic('WhatsApp results menurun','yellow',
+       'WA '+C.wa+' vs '+P.wa+' ('+chgWa.toFixed(0)+'%)',
+       'Possible cause: kreatif letih, audience kehabisan, atau supply/placement berubah. Needs investigation — tak cukup data untuk sahkan.',
+       'BandCompare iklan per iklan: ad mana yang jatuh? Semak frequency + CPM. Tweak/buat creative baru untuk ad yang fatigue.',
+       'WA results · CPL · frequency');
+  } else if(chgCtr==null||Math.abs(chgCtr||0)<=10){
+    if(chgCpl!=null&&chgCpl<-10)
+      ic('Efficiency membaik','green',
+         'CPL '+fmtRMC(cpl)+' vs '+fmtRMC(pcpl)+' ('+chgCpl.toFixed(1)+'%)',
+         'Traffic makin cekap — positive signal.',
+         'Ini masa sesuai untuk scale (naikkan budget perlahan 10-20%) sambil pantau CPL kekal stabil.',
+         'CPL · WA results · spend');
+    else
+      ic('Performance stabil','green',
+         'Tiada metrik jatuh melebihi ambang 10% (CTR/CPL/hasil).',
+         'Kempen berjalan dalam julat normal.',
+         'Teruskan. Fokus: tingkatkan hasil — test creative baru berdasarkan winning angle, atau tambah audience.',
+         'Semua KPI utama');
+  }
+  /* root-cause logic: di mana funnel bocor */
+  h+='<div class="insight-card"><div style="font-weight:800;font-size:13px">🧭 Funnel Diagnostics — di mana nak lihat?</div>'
+    +'<table class="tbl" style="margin-top:6px"><tr><th>Jika stage ini bocor</th><th>Check seterusnya</th></tr>'
+    +'<tr><td>Impressions → Clicks (CTR ↓)</td><td>Creative relevan? Audience betul? Offer jelas? Placement?</td></tr>'
+    +'<tr><td>Clicks → WhatsApp (conv ↓)</td><td>CTA jelas? Landing/WA link berfungsi? Traffic quality?</td></tr>'
+    +'<tr><td>WA → Qualified (lead quality ↓)</td><td>Messaging iklan janji tepat? Audience sesuai? (perlu CRM)</td></tr>'
+    +'<tr><td>Qualified → Purchase (close rate ↓)</td><td>Follow-up laju? Harga/offer? Trust? (perlu sales data)</td></tr>'
+    +'</table></div>';
+  /* data gap */
+  h+='<div class="insight-card"><div style="font-weight:800;font-size:13px">📌 Data gap — untuk keputusan penuh</div>'
+    +'<div style="font-size:12px;color:var(--dim);margin-top:4px">Revenue/ROAS/profit tak boleh dikira tanpa integrasi sales (CRM/Shopify). Untuk JFR Auto: sambungkan <b>WhatsApp sales tracking</b> (lead → qualified → jual) supaya funnel penuh & CPA sebenar muncul. Untuk Dians Signature: sambung <b>Shopify/GA4</b> — pixel events (view, ATC, checkout, purchase) akan hidupkan funnel e-commerce secara automatik.</div></div>';
+  el.innerHTML=h;
+}
+function ctrL(){const d=pmData;if(!d)return'—';const C=pmAgg((d.current||{}).data||[]);return C.impr?(C.link/C.impr*100).toFixed(2):'—';}
+function pCtrL(){const d=pmData;if(!d)return'—';const P=pmAgg((d.previous||{}).data||[]);return P.impr?(P.link/P.impr*100).toFixed(2):'—';}
+/* ===== Campaign table (sortable) ===== */
+function renderPMCamps(rows){
+  const el=$('pmCampTable');if(!el)return;
+  const camps={};
+  for(const r of rows){const k=r.campaign_name||'(none)';if(!camps[k])camps[k]={spend:0,impr:0,clicks:0,link:0,wa:0,reach:0};const c=camps[k];c.spend+=+r.spend||0;c.impr+=+r.impressions||0;c.clicks+=+r.clicks||0;c.link+=+r.inline_link_clicks||0;c.reach+=+r.reach||0;
+    for(const ac of(r.actions||[])){if((ac.action_type||'').includes('messaging_conversation'))c.wa+=+ac.value||0;}}
+  let arr=Object.entries(camps).map(([k,c])=>({name:k,...c,cpl:c.wa?c.spend/c.wa:null,ctr:c.impr?c.link/c.impr*100:0,cpc:c.link?c.spend/c.link:null}));
+  const key=pmSort||'spend';
+  arr.sort((a,b)=>key==='cpl'?((a.cpl??1e9)-(b.cpl??1e9)):((b[key]||0)-(a[key]||0)));
+  let h='<table class="tbl"><tr><th>Campaign</th><th class="num">Spend</th><th class="num">Impr</th><th class="num">CTR lnk</th><th class="num">CPC lnk</th><th class="num">WA</th><th class="num">CPL</th><th class="num">CPM</th><th class="num">Revenue</th><th class="num">ROAS</th><th>Verdict</th></tr>';
+  for(const c of arr){
+    let v='<span style="font-size:11px;color:var(--faint)">—</span>';
+    if(c.wa>0&&c.cpl){v=c.cpl<5?'<span style="color:#047857;font-weight:700">SCALE 🟢</span>':c.cpl<10?'<span style="color:#d97706">Monitor 🟡</span>':'<span style="color:#b91c1c">Investigate 🔴</span>';}
+    h+='<tr><td><b>'+esc(c.name)+'</b></td><td class="num">'+fmtRMC(c.spend)+'</td><td class="num">'+fmtN(c.impr)+'</td><td class="num">'+c.ctr.toFixed(2)+'%</td><td class="num">'+(c.cpc?fmtRMC(c.cpc):'—')+'</td><td class="num">'+fmtN(c.wa)+'</td><td class="num">'+(c.cpl!=null?fmtRMC(c.cpl):'—')+'</td><td class="num">'+(c.impr?fmtRMC(c.spend/c.impr*1000):'—')+'</td><td class="num na-tag">N/A</td><td class="num na-tag">N/A</td><td>'+v+'</td></tr>';
+  }
+  if(!arr.length)h+='<tr><td colspan="11" class="na-tag">Tiada data</td></tr>';
+  h+='</table>';
+  h+='<div style="font-size:11px;color:var(--faint);padding:6px 2px">Verdict sementara: SCALE = CPL &lt; RM5 · Monitor = RM5-10 · Investigate = &gt; RM10. Revenue/ROAS akan hidup bila sales data disambung.</div>';
+  el.innerHTML=h;
+}
+function pmCampSort(k){pmSort=k;renderPMCamps((pmData.current||{}).data||[]);document.querySelectorAll('#pmCampTable ~ * , .sortbtn').forEach(()=>{});document.querySelectorAll('.pmsec .sortbtn').forEach(b=>{});}
+/* ===== Ad set table ===== */
+function renderPMAdsets(rows){
+  const el=$('pmAdsetTable');if(!el)return;
+  const m={};
+  for(const r of rows){const k=r.adset_name||'(none)';if(!m[k])m[k]={spend:0,wa:0,clicks:0,impr:0,reach:0,link:0};const a=m[k];a.spend+=+r.spend||0;a.clicks+=+r.clicks||0;a.impr+=+r.impressions||0;a.reach+=+r.reach||0;a.link+=+r.inline_link_clicks||0;
+    for(const ac of(r.actions||[])){if((ac.action_type||'').includes('messaging_conversation'))a.wa+=+ac.value||0;}}
+  let h='<table class="tbl"><tr><th>Ad Set / Audience</th><th class="num">Spend</th><th class="num">CTR lnk</th><th class="num">CPC lnk</th><th class="num">WA</th><th class="num">CPL</th><th class="num">Freq</th><th>Signal</th></tr>';
+  for(const [k,a] of Object.entries(m)){
+    const ctr=a.impr?a.link/a.impr*100:0, cpl=a.wa?a.spend/a.wa:null, freq=a.reach?a.impr/a.reach:0;
+    let sig='<span style="font-size:11px;color:var(--faint)">—</span>';
+    if(freq>3&&ctr<1.5)sig='<span style="font-size:11px;color:#d97706">Possible fatigue (freq '+freq.toFixed(1)+'x, CTR rendah)</span>';
+    else if(cpl!=null&&cpl<5)sig='<span style="font-size:11px;color:#047857">Cekap — scaling potential</span>';
+    h+='<tr><td><b>'+esc(k)+'</b></td><td class="num">'+fmtRMC(a.spend)+'</td><td class="num">'+ctr.toFixed(2)+'%</td><td class="num">'+(a.link?fmtRMC(a.spend/a.link):'—')+'</td><td class="num">'+fmtN(a.wa)+'</td><td class="num">'+(cpl!=null?fmtRMC(cpl):'—')+'</td><td class="num">'+freq.toFixed(2)+'x</td><td>'+sig+'</td></tr>';
+  }
+  if(!Object.keys(m).length)h+='<tr><td colspan="8" class="na-tag">Tiada data</td></tr>';
+  el.innerHTML=h;
+}
+/* ===== Creative table ===== */
+function renderPMCreatives(rows){
+  const el=$('pmCreativeTable');if(!el)return;
+  let h='<table class="tbl"><tr><th>Creative (Ad)</th><th class="num">Spend</th><th class="num">Impr</th><th class="num">Freq</th><th class="num">CTR lnk</th><th class="num">CPC lnk</th><th class="num">WA</th><th class="num">CPL</th><th class="num">% WA</th><th>Status</th></tr>';
+  const tot=C=>{const d=pmData;if(!d)return 1;const a=pmAgg((d.current||{}).data||[]);return a.wa||1;};
+  const totalWa=tot();
+  [...rows].sort((a,b)=>{let wa=0,wb=0;for(const ac of(a.actions||[])){if((ac.action_type||'').includes('messaging_conversation'))wa+=+ac.value||0;}for(const ac of(b.actions||[])){if((ac.action_type||'').includes('messaging_conversation'))wb+=+ac.value||0;}return wb-wa;}).forEach(r=>{
+    let wav=0;for(const ac of(r.actions||[])){if((ac.action_type||'').includes('messaging_conversation'))wav+=+ac.value||0;}
+    const sp=+r.spend||0, imp=+r.impressions||0, lnk=+r.inline_link_clicks||0, reach=+r.reach||0;
+    const ctr=imp?lnk/imp*100:0, cpc=lnk?sp/lnk:null, cpl=wav?sp/wav:null, freq=reach?imp/reach:0;
+    let status='<span style="font-size:11px;color:var(--faint)">warming</span>';
+    if(wav>0&&cpl!=null){status=cpl<5?'<span style="color:#047857;font-weight:700">WINNING 🏆</span>':cpl<10?'<span style="color:#d97706">monitor</span>':'<span style="color:#b91c1c">losing</span>';}
+    if(freq>3.5&&ctr<1)status='<span style="color:#d97706">possible fatigue</span>';
+    h+='<tr><td>'+esc(r.ad_name||'?')+'</td><td class="num">'+fmtRMC(sp)+'</td><td class="num">'+fmtN(imp)+'</td><td class="num">'+(freq?freq.toFixed(2)+'x':'—')+'</td><td class="num">'+ctr.toFixed(2)+'%</td><td class="num">'+(cpc?fmtRMC(cpc):'—')+'</td><td class="num">'+fmtN(wav)+'</td><td class="num">'+(cpl?fmtRMC(cpl):'—')+'</td><td class="num">'+(wav/totalWa*100).toFixed(1)+'%</td><td>'+status+'</td></tr>';
+  });
+  if(!rows.length)h+='<tr><td colspan="10" class="na-tag">Tiada data</td></tr>';
+  h+='</table>';
+  h+='<div style="font-size:11px;color:var(--faint);padding:6px 2px">Status: WINNING = CPL &lt; RM5 · losing = &gt; RM10 · possible fatigue = freq &gt; 3.5x dengan CTR link &lt; 1%. Metadata creative (hook/angle/creator) — N/A, belum diisi.</div>';
+  el.innerHTML=h;
+}
 /* mascot drag + status */
 (function(){const m=$('mascot');let on=false,ox=0,oy=0;
   m.addEventListener('mousedown',e=>{on=true;ox=e.clientX-m.getBoundingClientRect().left;oy=e.clientY-m.getBoundingClientRect().top;e.preventDefault();});
