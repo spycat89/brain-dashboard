@@ -729,59 +729,89 @@ function deliveryAlertsHtml(camps, d){
   if (!alerts.length) return '<div style="color:var(--faint);font-size:12.5px;padding:8px 2px">✅ All delivery looks normal.</div>';
   return alerts.slice(0,5).map(a=>'<div style="display:flex;gap:9px;padding:8px 6px;border-bottom:1px solid #f3f4f6;font-size:12.5px;align-items:center"><span>'+a.icon+'</span><span>'+a.txt+'</span></div>').join('');
 }
+/* ===== METRIC MAPPING (Requirement 5) — satu sumber per metric ===== */
+const TREND_METRICS = {
+  spend:   { label: 'Amount Spent', axis: v => fmtRM(v),                       tip: v => fmtRM(v) },
+  results: { label: 'Results',      axis: v => Math.round(v).toLocaleString(), tip: v => Math.round(v).toLocaleString() + ' results' },
+  impr:    { label: 'Impressions',  axis: v => Math.round(v).toLocaleString(), tip: v => Math.round(v).toLocaleString() },
+  reach:   { label: 'Reach',        axis: v => Math.round(v).toLocaleString(), tip: v => Math.round(v).toLocaleString() },
+  cpm:     { label: 'CPM',          axis: v => fmtRM(v),                       tip: v => fmtRM(v) },
+  ctr:     { label: 'CTR (all)',    axis: v => v.toFixed(1) + '%',             tip: v => v.toFixed(2) + '%' }
+};
+function trendMetricValue(day, metric){
+  switch (metric){
+    case 'spend':   return Number(day.spend || 0);
+    case 'results': return day.results || 0;                    // ← normalized Results (sama mcm KPI/WoW/hierarchy)
+    case 'impr':    return Number(day.impressions || 0);
+    case 'reach':   return Number(day.reach || 0);
+    case 'cpm':     return day.impressions ? (Number(day.spend||0) / Number(day.impressions) * 1000) : 0;
+    case 'ctr':     return day.impressions ? (Number(day.clicks||0) / Number(day.impressions) * 100) : 0;
+    default:        return Number(day.spend || 0);
+  }
+}
+/* Bina series harian: aggregate + continuous (hari kosong = 0) */
+function buildDailySeries(d){
+  const di = (d.daily_insights && d.daily_insights.data) || [];
+  const byDay = {};
+  for (const r of di){
+    const k = String(r.date_start || r.date || '').slice(0, 10);
+    if (!k) continue;
+    if (!byDay[k]) byDay[k] = { date_start: k, spend: 0, impressions: 0, clicks: 0, reach: 0, linkClicks: 0, results: 0 };
+    const b = byDay[k];
+    b.spend += Number(r.spend || 0);
+    b.impressions += Number(r.impressions || 0);
+    b.clicks += Number(r.clicks || 0);
+    b.reach += Number(r.reach || 0);
+    b.linkClicks += Number(r.inline_link_clicks || 0);
+    b.results += resOf(r);       // ← SUMBER SAMA dgn KPI/WoW/hierarchy (messaging_conversation_started)
+  }
+  // continuous daily series ikut selected date range (Requirement 4 — jangan buang hari 0)
+  const from = d.from, to = d.to;
+  if (from && to){
+    const out = []; let cur = new Date(from + 'T00:00:00'); const end = new Date(to + 'T00:00:00');
+    let guard = 0;
+    while (cur <= end && guard < 400){
+      const k = cur.getFullYear() + '-' + String(cur.getMonth()+1).padStart(2,'0') + '-' + String(cur.getDate()).padStart(2,'0');
+      out.push(byDay[k] || { date_start: k, spend: 0, impressions: 0, clicks: 0, reach: 0, linkClicks: 0, results: 0 });
+      cur.setDate(cur.getDate() + 1); guard++;
+    }
+    if (out.length) return out;
+  }
+  return Object.values(byDay).sort((a,b) => a.date_start.localeCompare(b.date_start));
+}
 function drawTrend(d){
   const svg = $('trendChart'); if (!svg) return;
-  let daily = [];
-  const di = (d.daily_insights && d.daily_insights.data) || [];
-  if (di.length) {
-    const byDay = {};
-    for (const r of di) {
-      const k = String(r.date_start || r.date || '');
-      if (!k) continue;
-      if (!byDay[k]) byDay[k] = { date_start: k, spend: 0, impressions: 0, clicks: 0, reach: 0, results: 0 };
-      byDay[k].spend += Number(r.spend || 0);
-      byDay[k].impressions += Number(r.impressions || 0);
-      byDay[k].clicks += Number(r.clicks || 0);
-      byDay[k].reach += Number(r.reach || 0);
-    }
-    daily = Object.values(byDay);
-  } else {
-    for (const c of (d.tree.campaigns || [])) for (const day of (c.daily || [])) daily.push(day);
-  }
+  const daily = buildDailySeries(d);
   if (!daily.length){ svg.innerHTML='<text x="300" y="95" text-anchor="middle" fill="#9ca3af" font-size="12">Tiada data harian</text>'; return; }
-  daily.sort((a,b)=>String(a.date_start||a.date).localeCompare(String(b.date_start||b.date)));
-  // metric pilihan
-  const metric = metaTrendMetric||'spend';
-  const val = day => {
-    if (metric==='spend') return +day.spend||0;
-    if (metric==='impr') return +day.impressions||0;
-    if (metric==='reach') return +day.reach||0;
-    if (metric==='clicks') return +day.clicks||0;
-    if (metric==='results') return +day.results||0;
-    if (metric==='ctr') return day.impressions? (day.clicks||0)/(+day.impressions)*100:0;
-    if (metric==='cpm') return day.impressions? (+day.spend||0)/(+day.impressions)*1000:0;
-    return +day.spend||0;
-  };
+  const metric = metaTrendMetric || 'spend';
+  const MM = TREND_METRICS[metric] || TREND_METRICS.spend;
+  const vals = daily.map(x => trendMetricValue(x, metric));
+  // Requirement 7 — validate: SUM(daily) mesti == total period (utk Results)
+  if (metric === 'results'){
+    const totalRes = computeTotals(d).results || 0;
+    const sumRes = vals.reduce((s,v)=>s+v, 0);
+    if (totalRes > 0 && sumRes !== totalRes){
+      console.warn('[Trend] Results mismatch — daily SUM=' + sumRes + ' vs total=' + totalRes + ' (semak mapping)');
+    }
+  }
   const W=600,H=190,padL=52,padR=12,padT=16,padB=28;
   const iw=W-padL-padR, ih=H-padT-padB;
-  const vals = daily.map(val);
   const maxV = Math.max(...vals, 1) * 1.15;
   svg.innerHTML='';
   const ns='http://www.w3.org/2000/svg';
   const mk=(tag,at)=>{const e=document.createElementNS(ns,tag);for(const k in at)e.setAttribute(k,at[k]);return e;};
-  for(let g=0;g<=3;g++){const y=padT+ih-g*ih/3;svg.appendChild(mk('line',{x1:padL,y1:y,x2:W-padR,y2:y,stroke:'#f0edea','stroke-width':1}));const tx=mk('text',{x:padL-6,y:y+4,'text-anchor':'end','font-size':9.5,fill:'#9ca3af'});tx.textContent = (metric==='ctr')? (maxV*g/3).toFixed(1)+'%' : (metric==='cpm')? 'RM'+Math.round(maxV*g/3) : Math.round(maxV*g/3).toLocaleString(); svg.appendChild(tx);}
+  for(let g=0;g<=3;g++){const y=padT+ih-g*ih/3;svg.appendChild(mk('line',{x1:padL,y1:y,x2:W-padR,y2:y,stroke:'#f0edea','stroke-width':1}));const tx=mk('text',{x:padL-6,y:y+4,'text-anchor':'end','font-size':9.5,fill:'#9ca3af'});tx.textContent=MM.axis(maxV*g/3);svg.appendChild(tx);}
   const step=iw/Math.max(daily.length-1,1);
   const bw=Math.min(30, step*0.5);
-  const fmtV = v => metric==='ctr'? v.toFixed(2)+'%' : metric==='cpm'? fmtRM(v) : (metric==='spend'? fmtRM(v) : Math.round(v).toLocaleString());
   daily.forEach((x,i)=>{
-    const v=val(x); const cx=padL+i*step, bx=cx-bw/2;
-    const hh=Math.max(v/maxV*ih, 1.5);
-    svg.appendChild(mk('rect',{x:bx,y:padT+ih-hh,width:bw,height:hh,fill:'#f97316',rx:3,opacity:.9}));
-    const tx=mk('text',{x:cx,y:H-7,'text-anchor':'middle','font-size':8.5,fill:'#9ca3af'});tx.textContent=(x.date_start||x.date||'').slice(5);svg.appendChild(tx);
-    const vl=mk('text',{x:cx,y:padT+ih-hh-4,'text-anchor':'middle','font-size':8,fill:'#6b7280'});vl.textContent=fmtV(v);svg.appendChild(vl);
+    const v=trendMetricValue(x, metric); const cx=padL+i*step, bx=cx-bw/2;
+    const hh= v>0 ? Math.max(v/maxV*ih, 2) : 0;
+    if (hh>0) svg.appendChild(mk('rect',{x:bx,y:padT+ih-hh,width:bw,height:hh,fill:'#f97316',rx:3,opacity:.9}));
+    const tx=mk('text',{x:cx,y:H-7,'text-anchor':'middle','font-size':8.5,fill:'#9ca3af'});tx.textContent=(x.date_start||'').slice(5);svg.appendChild(tx);
+    const vl=mk('text',{x:cx,y:padT+ih-hh-4,'text-anchor':'middle','font-size':8,fill:'#6b7280'});vl.textContent=MM.tip(v);svg.appendChild(vl);
   });
-  if(daily.length>1){let pl='';daily.forEach((x,i)=>{const v=val(x),cx=padL+i*step;pl+=(i?',':'')+cx+','+(padT+ih-(v/maxV)*ih);});svg.appendChild(mk('polyline',{points:pl,fill:'none',stroke:'#c2410c','stroke-width':1.4}));}
-  const cap=mk('text',{x:padL,y:11,'font-size':9.5,fill:'#6b7280'});cap.textContent = {'spend':'Amount Spent','results':'Results','impr':'Impressions','reach':'Reach','ctr':'CTR (all)','cpm':'CPM'}[metric]||metric; svg.appendChild(cap);
+  if(daily.length>1){let pl='';daily.forEach((x,i)=>{const v=trendMetricValue(x,metric),cx=padL+i*step;pl+=(i?',':'')+cx+','+(padT+ih-(v/maxV)*ih);});svg.appendChild(mk('polyline',{points:pl,fill:'none',stroke:'#c2410c','stroke-width':1.4}));}
+  const cap=mk('text',{x:padL,y:11,'font-size':9.5,fill:'#6b7280'});cap.textContent=MM.label;svg.appendChild(cap);
 }
 function applyDates(){
   const f=$('mFrom'), t=$('mTo');

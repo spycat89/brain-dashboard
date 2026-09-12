@@ -106,6 +106,9 @@ class Handler(BaseHTTPRequestHandler):
             to_date = qs.get("to", [""])[0] or ""
             FIELDS_C = "campaign_name,spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,inline_link_clicks,inline_link_click_ctr,actions,cost_per_action_type,objective"
             FIELDS_A = FIELDS_C + ",adset_name,ad_name"
+            # daily: WAJIB ada actions + inline_link_clicks supaya setiap metric chart
+            # (Results/CTR/CPC) boleh dikira dari sumber SAMA dgn KPI/WoW/hierarchy
+            FIELDS_DAILY = "ad_name,campaign_name,spend,impressions,clicks,reach,inline_link_clicks,actions,date_start"
 
             if path == "/api/meta/accounts":
                 # SEMUA connected ad accounts utk dropdown
@@ -192,20 +195,20 @@ class Handler(BaseHTTPRequestHandler):
                 fin = z.get_finance(adid)
                 ins = z.api_get("/ads/insights", {
                     "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
-                    "objectId": adid, "level": "campaign", "fields": FIELDS_C,
+                    "objectId": adid, "level": "campaign", "fields": FIELDS_C, "limit": "500",
                     "fromDate": f, "toDate": t})
                 prev_ins = z.api_get("/ads/insights", {
                     "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
-                    "objectId": adid, "level": "campaign", "fields": FIELDS_C,
+                    "objectId": adid, "level": "campaign", "fields": FIELDS_C, "limit": "500",
                     "fromDate": fmt(prev_from), "toDate": fmt(prev_to)})
                 ads_ins = z.api_get("/ads/insights", {
                     "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
-                    "objectId": adid, "level": "ad", "fields": FIELDS_A,
+                    "objectId": adid, "level": "ad", "fields": FIELDS_A, "limit": "500",
                     "fromDate": f, "toDate": t})
                 daily_ins = z.api_get("/ads/insights", {
                     "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
                     "objectId": adid, "level": "ad", "timeIncrement": "1",
-                    "fields": "ad_name,spend,impressions,clicks,reach",
+                    "fields": FIELDS_DAILY, "limit": "500",
                     "fromDate": f, "toDate": t})
                 self._send(200, json.dumps({"tree": tree, "finance": fin,
                                              "insights": ins,
@@ -236,16 +239,16 @@ class Handler(BaseHTTPRequestHandler):
                 fields = FIELDS_A
                 cur = z.api_get("/ads/insights", {
                     "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
-                    "objectId": adid, "level": "ad", "fields": fields,
+                    "objectId": adid, "level": "ad", "fields": fields, "limit": "500",
                     "fromDate": f, "toDate": t})
                 prev = z.api_get("/ads/insights", {
                     "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
-                    "objectId": adid, "level": "ad", "fields": fields,
+                    "objectId": adid, "level": "ad", "fields": fields, "limit": "500",
                     "fromDate": fmt(prev_from), "toDate": fmt(prev_to)})
                 daily = z.api_get("/ads/insights", {
                     "accountId": z.ZERNIO_ACCOUNT_ID, "adAccountId": adid,
                     "objectId": adid, "level": "ad", "timeIncrement": "1",
-                    "fields": "ad_name,spend,impressions,clicks,reach,date_start",
+                    "fields": "ad_name,spend,impressions,clicks,reach,date_start", "limit": "500",
                     "fromDate": f, "toDate": t})
                 fin = z.get_finance(adid)
                 self._send(200, json.dumps({
