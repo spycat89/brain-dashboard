@@ -169,8 +169,8 @@ def metric_cards(T):
             if not c:
                 rows += "<td></td><td></td>"
                 continue
-            rows += ('<td class="mcard"><div class="mval">%s</div>'
-                     '<div class="mlbl">%s</div><div class="msub">%s</div></td>') % (
+            rows += ('<td class="mcard"><div class="mlbl">%s</div>'
+                     '<div class="mval">%s</div><div class="msub">%s</div></td>') % (
                 c[0], c[1], c[2])
         rows += "</tr>"
     return rows
@@ -266,57 +266,86 @@ def trend_svg(daily, metric="spend"):
     return "".join(svg)
 
 
-def hierarchy_rows(d, prev_tot):
-    """Campaign/AdSet/Ad rows dgn results konsisten."""
-    rows = []
-    camp_ins = {}
-    for r in (d.get("insights") or {}).get("data", []) or []:
-        camp_ins[r.get("campaign_name")] = r
+def hierarchy_rows(d):
+    """Campaign → Ad Set → Ad (nama sebenar dari ads_insights, bukan tree).
+    Aggregate ad-level insights ikut campaign/adset; budget dari tree kalau ada."""
+    ads = (d.get("ads_insights") or {}).get("data", []) or []
+    # budget map dari tree (by campaign/adset name)
+    budget_camp = {}
+    budget_adset = {}
     for c in (d.get("tree") or {}).get("campaigns", []) or []:
-        cm = c.get("metrics") or {}
-        cres = res_of(cm)
-        rows.append(("camp", esc(c.get("campaignName") or c.get("name") or "?"),
-                     cres, float(cm.get("spend") or 0), cm, c.get("status")))
-        for as_ in (c.get("adSets") or []) or []:
-            am = as_.get("metrics") or {}
-            asres = res_of(am)
-            rows.append(("adset", esc(as_.get("adSetName") or "?"),
-                         asres, float(am.get("spend") or 0), am,
-                         (as_.get("budget") or {}).get("amount")))
-            for ad in (as_.get("ads") or []) or []:
-                adm = ad.get("metrics") or {}
-                adres = res_of(adm)
-                rows.append(("ad", esc(ad.get("adName") or "(ad)"),
-                             adres, float(adm.get("spend") or 0), adm, ad.get("status")))
-    out = ""
-    for kind, name, res, spend, m, note in rows:
-        cpm = (spend * 1000 / float(m.get("impressions") or 0)) if m.get("impressions") else 0
-        ctr_all = (float(m.get("clicks") or 0) * 100 / float(m.get("impressions") or 0)) if m.get("impressions") else 0
-        ctr_link = (float(m.get("inlineLinkClicks") or 0) * 100 / float(m.get("impressions") or 0)) if m.get("impressions") else 0
-        cpc = (spend / float(m.get("inlineLinkClicks") or 0)) if m.get("inlineLinkClicks") else None
+        cname = c.get("campaignName") or c.get("name") or ""
+        cb = (c.get("budget") or {}).get("amount")
+        if cb:
+            budget_camp[cname] = cb
+        for asc in (c.get("adSets") or []) or []:
+            an = asc.get("adSetName") or ""
+            ab = (asc.get("budget") or {}).get("amount")
+            if ab:
+                budget_adset[(cname, an)] = ab
+    # aggregate
+    camps = {}     # name -> totals
+    adsets = {}    # (camp, adset) -> totals
+    for r in ads:
+        cn = r.get("campaign_name") or "(campaign)"
+        an = r.get("adset_name") or "(ad set)"
+        for key, store in ((cn, camps), ((cn, an), adsets)):
+            t = store.setdefault(key, {"spend": 0, "impr": 0, "reach": 0, "clicks": 0, "link": 0, "results": 0})
+            t["spend"] += float(r.get("spend") or 0)
+            t["impr"] += float(r.get("impressions") or 0)
+            t["reach"] += float(r.get("reach") or 0)
+            t["clicks"] += float(r.get("clicks") or 0)
+            t["link"] += float(r.get("inline_link_clicks") or 0)
+            t["results"] += res_of(r)
+
+    def metrics_cells(m, spend, res):
+        cpm = (spend * 1000 / m["impr"]) if m["impr"] else 0
+        ctr_all = (m["clicks"] * 100 / m["impr"]) if m["impr"] else 0
+        ctr_link = (m["link"] * 100 / m["impr"]) if m["impr"] else 0
+        cpc = (spend / m["link"]) if m["link"] else None
         cpr = (spend / res) if res else None
-        freq = (float(m.get("impressions") or 0) / float(m.get("reach") or 0)) if m.get("reach") else 0
-        icon = {"camp": "\U0001F4E2", "adset": "\U0001F3AF", "ad": "\U0001F5BC"}.get(kind, "")
-        pad = {"camp": "", "adset": " style='padding-left:22px'", "ad": " style='padding-left:44px'"}[kind]
-        extra = ""
-        if kind == "adset" and note:
-            extra = '<div class="hsub">Daily budget %s</div>' % fmt_rm(note)
-        elif note:
-            extra = '<div class="hsub">%s</div>' % esc(note)
-        out += (
-            "<tr><td%s><div class='hname'>%s %s</div>%s</td>"
-            "<td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td>"
-            "<td>%s</td><td>%s</td><td>%s</td></tr>"
-        ) % (pad, icon, name, extra,
-             fmt_n(res) if kind == "camp" else (fmt_n(res) if res else "\u2014"),
-             fmt_rm(cpr) if cpr is not None else "\u2014",
-             fmt_rm(spend), fmt_rm(cpm), fmt_n(m.get("impressions") or 0),
-             ("{:.2f}x".format(freq)) if freq else "\u2014",
-             fmt_n(m.get("reach") or 0),
-             pct_str(ctr_all) if kind != "ad" else pct_str(ctr_all),
-             pct_str(ctr_link) if kind != "ad" else pct_str(ctr_link),
-             fmt_rm(cpc) if cpc is not None else "\u2014")
-    return out
+        freq = (m["impr"] / m["reach"]) if m["reach"] else 0
+        return (fmt_n(res) if res else "\u2014",
+                fmt_rm(cpr) if cpr is not None else "\u2014",
+                fmt_rm(spend), fmt_rm(cpm), fmt_n(m["impr"]),
+                ("{:.2f}x".format(freq)) if freq else "\u2014",
+                fmt_n(m["reach"]), pct_str(ctr_all), pct_str(ctr_link),
+                fmt_rm(cpc) if cpc is not None else "\u2014")
+
+    def row(cls, name, note, m, spend, res):
+        cells = metrics_cells(m, spend, res)
+        extra = '<div class="hsub">%s</div>' % esc(note) if note else ""
+        pad = (" style='padding-left:22px'" if cls == "r-adset"
+               else (" style='padding-left:44px'" if cls == "r-ad" else ""))
+        tds = "".join("<td>%s</td>" % c for c in cells)
+        return ("<tr class='%s'><td%s><div class='hname'>%s</div>%s</td>%s</tr>"
+                % (cls, pad, esc(name), extra, tds))
+
+    out = ""
+    # campaign rows
+    for cn, cm_ in camps.items():
+        note = ("Campaign budget %s" % fmt_rm(budget_camp[cn])) if cn in budget_camp else ""
+        out += row("r-camp", cn, note, cm_, cm_["spend"], cm_["results"])
+        # ad sets bawah campaign ni
+        for (c2, an), as_m in adsets.items():
+            if c2 != cn:
+                continue
+            ab = budget_adset.get((cn, an))
+            note2 = ("Daily budget %s" % fmt_rm(ab)) if ab else ""
+            out += row("r-adset", an, note2, as_m, as_m["spend"], as_m["results"])
+            # ads bawah adset ni
+            for r in ads:
+                if (r.get("campaign_name") or "") != cn or (r.get("adset_name") or "") != an:
+                    continue
+                adname = (r.get("ad_name") or "").strip()
+                if not adname:
+                    adname = "(ad)"  # fallback — hanya kalau API langsung tak bagi nama
+                out += row("r-ad", adname, "", {
+                    "impr": float(r.get("impressions") or 0),
+                    "reach": float(r.get("reach") or 0),
+                    "clicks": float(r.get("clicks") or 0),
+                    "link": float(r.get("inline_link_clicks") or 0)}, float(r.get("spend") or 0), res_of(r))
+    return out or "<tr><td colspan='11' class='na'>Tiada data.</td></tr>"
 
 
 def top_ads_rows(d):
@@ -352,7 +381,7 @@ def ai_sections(d):
     C = totals((d.get("insights") or {}).get("data", []))
     P = totals((d.get("prev_insights") or {}).get("data", []))
     ads = (d.get("ads_insights") or {}).get("data", []) or []
-    facts, obs, concl, rec, take = [], [], [], [], []
+    facts, obs, concl, take = [], [], [], []
     facts.append("%d ad aktif minggu ni." % len(ads))
     facts.append("Belanja iklan RM%.2f." % C["spend"])
     facts.append("%s orang hantar mesej (WhatsApp)." % fmt_n(C["results"]))
@@ -367,7 +396,6 @@ def ai_sections(d):
             obs.append("Video \"%s\" bawa paling banyak mesej (%.0f%% dari total)."
                        % (ad_res[0]["name"], share))
             concl.append("Hasil iklan tertumpu kat video tu — yang lain macam slow sikit.")
-            rec.append("Teruskan push video tu, dan cuba buat video baru ikut konsep yang sama.")
     chg = delta_pct(C["results"], P["results"])
     if chg is not None and abs(chg) >= 5:
         obs.append("Mesej masuk %s %.0f%% berbanding minggu lepas."
@@ -379,8 +407,6 @@ def ai_sections(d):
         if chgc is not None and abs(chgc) >= 5:
             obs.append("Kos per mesej %s — RM%.2f (minggu lepas RM%.2f)."
                        % ("naik" if chgc > 0 else "murah sikit", cpr, pcpr))
-    if not rec:
-        rec.append("Teruskan macam ni — pantau je iklan yang paling banyak bagi hasil.")
     if not concl:
         concl.append("Minggu ni jalan macam biasa, takde perubahan besar.")
     if chg is not None:
@@ -400,8 +426,9 @@ def ai_sections(d):
     def ul(t, items):
         return ("<div class='aihead'>%s</div><ul class='ailist'>%s</ul>" % (
             t, "".join("<li>%s</li>" % esc(x) for x in items))) if items else ""
+    # SYOR dibuang dari PDF (Requirement 5) — kekal FAKTA/PEMERHATIAN/KESIMPULAN/POIN PENTING
     return ul("FAKTA", facts) + ul("PEMERHATIAN", obs) + ul("KESIMPULAN", concl) \
-        + ul("SYOR", rec) + ul("POIN PENTING", take)
+        + ul("POIN PENTING", take)
 
 
 def build_html(ctx, d):
@@ -442,9 +469,9 @@ def build_html(ctx, d):
   .mc tr td {{ padding: 3px; }}
   .mcard {{ border: 1px solid #e8e2dc; border-radius: 8px; padding: 8px 10px !important;
             background: #fdfaf7; }}
-  .mval {{ font-size: 16pt; font-weight: 800; color: #1f2430; }}
-  .mlbl {{ font-size: 8.5pt; color: #6b7280; }}
-  .msub {{ font-size: 8pt; color: #9ca3af; }}
+  .mval {{ font-size: 19pt; font-weight: 800; color: #1f2430; line-height: 1.1; }}
+  .mlbl {{ font-size: 7.8pt; color: #6b7280; text-transform: uppercase; letter-spacing: .4px; }}
+  .msub {{ font-size: 7.2pt; color: #9ca3af; }}
   .mc table td {{ width: 50%; }}
   .wt td {{ border: 1px solid #ece8e4; padding: 6px 9px; font-size: 10pt; }}
   .wt th {{ background: #fff3ec; border: 1px solid #ece8e4; padding: 7px 9px; text-align: left;
@@ -461,6 +488,14 @@ def build_html(ctx, d):
   .ht td.num {{ text-align: right; }}
   .hname {{ font-weight: 700; font-size: 9pt; }}
   .hsub {{ font-size: 7.5pt; color: #9ca3af; }}
+  /* ===== page-break handling (elak section/table terpotong pelik) ===== */
+  h2 {{ page-break-after: avoid; break-after: avoid; }}
+  table.ht tr, table.wt tr, .mcard {{ page-break-inside: avoid; break-inside: avoid; }}
+  table.ht thead {{ display: table-header-group; }}
+  table.ht tbody tr.r-camp {{ page-break-before: auto; }}
+  .aihead {{ page-break-after: avoid; break-after: avoid; }}
+  .ailist li {{ page-break-inside: avoid; break-inside: avoid; }}
+  .panel {{ page-break-inside: avoid; break-inside: avoid; }}
   .rank {{ font-size: 12pt; font-weight: 900; color: #f97316; text-align: center; }}
   .aihead {{ font-weight: 800; font-size: 9.5pt; color: #c2410c; margin-top: 7px; }}
   .ailist {{ margin: 2px 0 4px; padding-left: 16px; }}
@@ -493,7 +528,7 @@ def build_html(ctx, d):
 
 <h2>Prestasi Iklan</h2>
 <table class="mc"><tbody>{cards}</tbody></table>
-<div style="font-size:7.5pt;color:#9ca3af;margin-top:3px">Mesej = perbualan WhatsApp (lead gen). Info bajet: tengok bahagian Hierarki \u2014 Daily Budget per ad set. Baki akaun: {bal}.</div>
+<div style="font-size:7.5pt;color:#9ca3af;margin-top:3px">Mesej = perbualan WhatsApp (lead gen). Info bajet (daily budget per ad set) ada dalam bahagian Hierarki Iklan.</div>
 
 <h2>Banding Dengan Minggu Lepas</h2>
 <table class="wt">
@@ -505,28 +540,10 @@ def build_html(ctx, d):
 <div class="panel">{trend}</div>
 <div style="font-size:7.5pt;color:#9ca3af;margin-top:3px">Carta: Belanja iklan sehari-hari \u00b7 {rng}</div>
 
-<div class="two avoid">
-  <div>
-    <h2>Bajet &amp; Belanja</h2>
-    <div class="panel">
-      <div class="big">{bal}</div>
-      <div style="font-size:8.5pt;color:#6b7280">Baki akaun</div>
-      <div style="margin-top:6px;font-size:8.5pt;color:#6b7280">{budget_note}</div>
-      <div style="font-size:8.5pt;color:#6b7280">Belanja minggu ni: {spend}</div>
-    </div>
-  </div>
-</div>
-
 <h2>Hierarki Iklan</h2>
 <table class="ht">
-  <tr><th>Kempen / Ad Set / Iklan</th><th>Mesej</th><th>Kos/Mesej</th><th>Belanja</th><th>CPM</th><th>Papar</th><th>Kekerapan</th><th>Jangkauan</th><th>CTR (all)</th><th>CTR (link)</th><th>CPC (link)</th></tr>
-  {hier}
-</table>
-
-<h2>Iklan Paling Power</h2>
-<table class="ht">
-  <tr><th style="width:6%">#</th><th>Iklan</th><th>Mesej</th><th>Kos/Mesej</th><th>Belanja</th><th>CTR (link)</th></tr>
-  {topads}
+  <thead><tr><th>Kempen / Ad Set / Iklan</th><th>Mesej</th><th>Kos/Mesej</th><th>Belanja</th><th>CPM</th><th>Papar</th><th>Kekerapan</th><th>Jangkauan</th><th>CTR (all)</th><th>CTR (link)</th><th>CPC (link)</th></tr></thead>
+  <tbody>{hier}</tbody>
 </table>
 
 <h2>KESIMPULAN IKLAN</h2>
@@ -545,7 +562,7 @@ def build_html(ctx, d):
         bal=fmt_rm(fin.get("balance")),
         spend=fmt_rm(C["spend"]),
         budget_note=budget_note,
-        hier=hierarchy_rows(d, P),
+        hier=hierarchy_rows(d),
         topads=top_ads_rows(d),
         ai=ai_sections(d),
     )
