@@ -23,6 +23,35 @@ HERMES = os.path.join(HOME, "hermes-agent", "venv", "Scripts", "hermes.exe")
 if not os.path.exists(HERMES):
     HERMES = "hermes"
 
+# ===== AI Weekly Analysis store (ONE SOURCE OF TRUTH — dikongsi dashboard + PDF) =====
+ANALYSIS_STORE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "analysis_store.json")
+
+
+def _analysis_key(acct, f, t):
+    return "%s|%s|%s" % (acct or "", f or "", t or "")
+
+
+def _read_analysis_store():
+    try:
+        with open(ANALYSIS_STORE, encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def load_analysis(acct, f, t):
+    return _read_analysis_store().get(_analysis_key(acct, f, t))
+
+
+def save_analysis(acct, f, t, analysis):
+    st = _read_analysis_store()
+    st[_analysis_key(acct, f, t)] = analysis
+    tmp = ANALYSIS_STORE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(st, fh, ensure_ascii=False, indent=1)
+    os.replace(tmp, ANALYSIS_STORE)
+    return True
+
 # Senarai dokumen "otak"
 BRAIN_FILES = [
     {"id": "soul", "name": "SOUL.md", "desc": "Identiti teras Ana", "path": os.path.join(HOME, "SOUL.md")},
@@ -110,6 +139,13 @@ class Handler(BaseHTTPRequestHandler):
             # (Results/CTR/CPC) boleh dikira dari sumber SAMA dgn KPI/WoW/hierarchy
             FIELDS_DAILY = "ad_name,campaign_name,spend,impressions,clicks,reach,inline_link_clicks,actions,date_start"
 
+            if path == "/api/meta/analysis":
+                # AI Weekly Analysis tersimpan (override manual) — ONE SOURCE OF TRUTH
+                aid2 = qs.get("adAccountId", [""])[0]
+                f2 = qs.get("from", [""])[0]
+                t2 = qs.get("to", [""])[0]
+                self._send(200, json.dumps({"analysis": load_analysis(aid2, f2, t2)}))
+                return
             if path == "/api/meta/accounts":
                 # SEMUA connected ad accounts utk dropdown
                 d = z.get_ad_accounts()
@@ -273,6 +309,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
+        if u.path == "/api/meta/analysis":
+            # Simpan AI Weekly Analysis (manual edit) — ONE SOURCE OF TRUTH
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+                save_analysis(body.get("adAccountId"), body.get("from"), body.get("to"),
+                              body.get("analysis") or {})
+                self._send(200, json.dumps({"ok": True, "saved": True}))
+            except Exception as e:
+                try:
+                    self._send(500, json.dumps({"error": str(e)}))
+                except Exception:
+                    pass
+            return
         if u.path == "/api/chat":
             try:
                 length = int(self.headers.get("Content-Length", 0))
@@ -314,6 +364,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(blob)
             except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print("[meta_pdf] ERROR:", e, flush=True)
                 try:
                     self._send(500, json.dumps({"error": str(e)}))
                 except Exception:

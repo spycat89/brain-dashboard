@@ -664,40 +664,138 @@ function topAdsHtml(adsRows){
   h+='</div></div>';
   return h;
 }
-function aiWeeklyHtml(T, P, campRows, adsRows, d){
-  let facts=[], obs=[], concl=[], rec=[];
-  facts.push(adsRows.length+' ad aktif dalam tempoh pelaporan.');
+/* ===== AI Weekly Analysis — ONE SOURCE OF TRUTH (dashboard + PDF) ===== */
+let aiAnalysis = null;     // {facts, observations, conclusions, keyTakeaways}
+let aiAnalysisKey = '';    // adAccountId|from|to
+let aiEdited = false;      // true = manual edit tersimpan (prioriti tinggi)
+let aiEditMode = false;
+
+function aiKeyOf(){ return (metaAcct||'')+'|'+(metaFrom||'')+'|'+(metaTo||''); }
+
+/* ENGINE TUNGGAL — jana analisis dari data sebenar (BM, fakta sahaja) */
+function buildWeeklyAnalysis(T, P, adsRows){
+  const facts=[], obs=[], concl=[], take=[];
+  facts.push(adsRows.length+' ad aktif dalam tempoh laporan.');
   facts.push('Jumlah spend '+fmtRM(T.spend)+'.');
-  facts.push(fmtN(T.results)+' result dijana (messaging conversations).');
-  facts.push('Reach '+fmtN(T.reach)+' orang · '+fmtN(T.impr)+' impressions · frequency '+(T.freq?T.freq.toFixed(2)+'x':'—')+'.');
-  // ad dominasi?
-  const adRes = adsRows.map(r=>{return{name:r.ad_name,res:resOf(r),spend:+r.spend||0};}).sort((a,b)=>b.res-a.res);
+  facts.push(fmtN(T.results)+' messaging conversations.');
+  facts.push('Reach '+fmtN(T.reach)+' orang dan '+fmtN(T.impr)+' impressions.');
+  const adRes = adsRows.map(r=>({name:r.ad_name, res:resOf(r)})).sort((a,b)=>b.res-a.res);
   if (adRes.length>1 && adRes[0] && adRes[0].res>0){
     const tot=adRes.reduce((s,a)=>s+a.res,0)||1;
     const share=adRes[0].res/tot*100;
-    if (share>50){ obs.push('Satu creative menerima majoriti hasil ('+share.toFixed(0)+'%): "'+adRes[0].name+'".'); concl.push('Delivery kempen tertumpu pada creative utama tersebut.'); rec.push('Terus pantau creative utama dan pertimbang buat variasi menggunakan angle yang sama.'); }
+    if (share>=50){
+      obs.push('Satu creative menghasilkan majoriti messaging conversations ('+share.toFixed(0)+'%): "'+adRes[0].name+'".');
+      concl.push('Prestasi kempen banyak tertumpu kepada satu creative utama.');
+      take.push('Creative utama menyumbang majoriti hasil ('+share.toFixed(0)+'%).');
+    }
   }
-  // WoW obs
-  const chgRes = P.results? ((T.results-P.results)/P.results*100):null;
-  if (chgRes!=null && Math.abs(chgRes)>=5) obs.push('Results '+(chgRes>0?'naik':'turun')+' '+Math.abs(chgRes).toFixed(0)+'% vs tempoh sebelumnya.');
-  const cpr=T.results?T.spend/T.results:0, pcpr=P.results?P.spend/P.results:0;
-  if (pcpr && cpr){ const dchg=(cpr-pcpr)/pcpr*100; if (Math.abs(dchg)>=5) obs.push('Cost per result '+(dchg>0?'naik':'turun')+' '+Math.abs(dchg).toFixed(0)+'% ('+fmtRM(cpr)+' vs '+fmtRM(pcpr)+').'); }
-  // rec default
-  if (!rec.length) rec.push('Teruskan pemantauan; fokus pada creative yang memberi hasil paling cekap.');
-  if (!concl.length) concl.push('Tempoh ini berjalan tanpa perubahan ketara melebihi ambang.');
-  const li=(t,arr)=>arr.length?'<div style="margin:2px 0"><span style="font-weight:800">'+t+'</span><ul style="margin:2px 0 6px;padding-left:18px;font-size:12.5px;color:var(--dim)">'+arr.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>':'';
-  // key takeaways ringkas
-  const take=[];
-  if (chgRes!=null) take.push('Results '+(chgRes>=0?'naik':'turun')+' vs tempoh sebelumnya'+(Math.abs(chgRes)>=5?' ('+(chgRes>0?'+':'')+chgRes.toFixed(0)+'%)':''));
-  if (pcpr && cpr && Math.abs((cpr-pcpr)/pcpr*100)>=5) take.push('Cost per result '+(cpr<pcpr?'membaik':'meningkat')+' — '+fmtRM(cpr)+' vs '+fmtRM(pcpr));
-  if (adRes.length>1 && adRes[0] && adRes[0].res>0){const s=adRes[0].res/(adRes.reduce((x,a)=>x+a.res,0)||1)*100; if(s>50) take.push('Satu creative terima majoriti hasil ('+s.toFixed(0)+'%)');}
-  const takeHtml = take.length ? '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px"><span style="font-weight:800">Key Takeaways</span><ul style="margin:4px 0 0;padding-left:18px;font-size:12.5px;color:var(--dim)">'+take.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></div>' : '';
-  return '<div class="tablewrap" style="margin-bottom:16px"><div class="thead">🤖 AI Weekly Analysis <span class="muted">utk laporan Jumaat — fakta, bukan tafsiran melampau</span></div>'
-    +'<div style="padding:12px 16px;font-size:12.5px">'
-    +li('FACT',facts)+li('OBSERVATION',obs)+li('CONCLUSION',concl)+li('RECOMMENDATION',rec)
-    +takeHtml
-    +'<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:11px;color:var(--faint)">Nota: analisis berdasarkan data sebenar tempoh ini sahaja. Tiada tuntutan seperti "audience suka" tanpa bukti data.</div>'
-    +'</div></div>';
+  const chgRes = (P && P.results)? ((T.results-P.results)/P.results*100) : null;
+  if (chgRes!=null && Math.abs(chgRes)>=5){
+    obs.push('Messaging conversations '+(chgRes>0?'naik':'turun')+' '+Math.abs(chgRes).toFixed(0)+'% berbanding tempoh sebelumnya.');
+    take.push('Messaging conversations '+(chgRes>=0?'naik':'turun')+' vs tempoh sebelumnya.');
+  }
+  const cpr = T.results? T.spend/T.results:0;
+  const pcpr = (P && P.results)? P.spend/P.results:0;
+  if (cpr && pcpr){
+    const dchg=(cpr-pcpr)/pcpr*100;
+    if (Math.abs(dchg)>=5){
+      obs.push('Cost per result '+(dchg>0?'naik':'turun')+' '+Math.abs(dchg).toFixed(0)+'% ('+fmtRM(cpr)+' vs '+fmtRM(pcpr)+').');
+      take.push('Cost per result '+(cpr<pcpr?'makin murah':'naik')+' — '+fmtRM(cpr)+'.');
+    }
+  }
+  if (!obs.length) obs.push('Tiada perubahan melebihi 5% dikesan berbanding tempoh sebelumnya.');
+  if (!concl.length) concl.push('Data tidak menunjukkan punca yang jelas untuk satu creative tertentu.');
+  if (!take.length) take.push('Kempen berjalan pada tahap biasa dalam tempoh ini.');
+  return {facts: facts, observations: obs, conclusions: concl, keyTakeaways: take};
+}
+
+/* Sediakan analisis: override tersimpan (manual) > janaan AI */
+function prepareAnalysis(T, P, adsRows){
+  aiAnalysisKey = aiKeyOf();
+  aiAnalysis = buildWeeklyAnalysis(T, P, adsRows);
+  aiEdited = false;
+  aiEditMode = false;
+  // semak override tersimpan — async, update bila sampai
+  const k = aiAnalysisKey;
+  fetch('/api/meta/analysis?adAccountId='+encodeURIComponent(metaAcct)+'&from='+encodeURIComponent(metaFrom)+'&to='+encodeURIComponent(metaTo))
+    .then(r=>r.json()).then(j=>{
+      if (k !== aiKeyOf()) return;             // period/akaun dah tukar — abaikan
+      if (j && j.analysis && (j.analysis.facts||j.analysis.conclusions)){
+        aiAnalysis = j.analysis; aiEdited = true;
+        refreshAiBlock();
+      }
+    }).catch(()=>{});
+}
+
+function refreshAiBlock(){
+  const box = $('aiWeeklyBody');
+  if (!box || !aiAnalysis) return;
+  box.innerHTML = aiRenderBody();
+}
+
+function aiRenderBody(){
+  if (!aiAnalysis) return '';
+  if (aiEditMode){
+    const sec = (label, key) =>
+      '<div style="margin:8px 0"><div style="font-weight:800;font-size:12.5px;margin-bottom:3px">'+label+'</div>'
+      +'<textarea id="ai_'+key+'" style="width:100%;min-height:74px;font-size:12.5px;font-family:inherit;padding:7px;border:1px solid var(--border);border-radius:8px;resize:vertical">'
+      + esc((aiAnalysis[key]||[]).join('\n')) +'</textarea>'
+      +'<div style="font-size:10.5px;color:var(--faint);margin-top:2px">Satu baris = satu poin. Kosongkan kalau tak perlu.</div></div>';
+    return '<div style="padding:12px 16px">'
+      + sec('FAKTA','facts') + sec('PEMERHATIAN','observations')
+      + sec('KESIMPULAN','conclusions') + sec('POIN PENTING','keyTakeaways')
+      + '<div style="margin-top:10px;display:flex;gap:8px">'
+      + '<button class="refresh" style="background:#16a34a;color:#fff;border:none" onclick="aiSave()">💾 Simpan</button>'
+      + '<button class="refresh" style="background:#6b7280;color:#fff;border:none" onclick="aiCancel()">Batal</button>'
+      + '</div></div>';
+  }
+  const li = (t, arr) => (arr && arr.length)
+    ? '<div style="margin:2px 0"><span style="font-weight:800">'+t+'</span><ul style="margin:2px 0 6px;padding-left:18px;font-size:12.5px;color:var(--dim)">'
+      + arr.map(x=>'<li>'+esc(x)+'</li>').join('') + '</ul></div>'
+    : '';
+  return '<div style="padding:12px 16px;font-size:12.5px">'
+    + li('FAKTA', aiAnalysis.facts)
+    + li('PEMERHATIAN', aiAnalysis.observations)
+    + li('KESIMPULAN', aiAnalysis.conclusions)
+    + li('POIN PENTING', aiAnalysis.keyTakeaways)
+    + '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:11px;color:var(--faint)">'
+    + (aiEdited ? '✏️ Versi diedit manual — disimpan untuk tempoh ini. ' : '')
+    + 'Analisis berdasarkan data sebenar tempoh ini sahaja. Tiada tuntutan seperti "audience suka" tanpa bukti data.</div></div>';
+}
+
+function aiEditStart(){ aiEditMode = true; refreshAiBlock(); }
+
+function aiParse(tid){
+  const el = $('ai_'+tid); if (!el) return [];
+  return el.value.split('\n').map(s=>s.trim()).filter(s=>s.length);
+}
+
+function aiSave(){
+  const obj = {
+    facts: aiParse('facts'),
+    observations: aiParse('observations'),
+    conclusions: aiParse('conclusions'),
+    keyTakeaways: aiParse('keyTakeaways')
+  };
+  aiAnalysis = obj; aiEditMode = false; aiEdited = true;
+  refreshAiBlock();
+  fetch('/api/meta/analysis', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({adAccountId: metaAcct, from: metaFrom, to: metaTo, analysis: obj})})
+    .then(r=>r.json()).then(()=>{ 
+      const box = $('aiWeeklyBox');
+      if (box){ box.style.borderColor = '#16a34a'; setTimeout(()=>{ box.style.borderColor=''; }, 1200); }
+    }).catch(()=>{});
+}
+
+function aiCancel(){ aiEditMode = false; refreshAiBlock(); }
+
+function aiWeeklyHtml(T, P, campRows, adsRows, d){
+  prepareAnalysis(T, P, adsRows);
+  return '<div class="tablewrap" id="aiWeeklyBox" style="margin-bottom:16px">'
+    + '<div class="thead">🤖 AI Weekly Analysis <span class="muted">utk laporan Jumaat — fakta, bukan tafsiran melampau</span>'
+    + '<span class="grow"></span>'
+    + '<button class="refresh" style="background:#2f3644;color:#fff;border:none;padding:3px 9px" onclick="aiEditStart()" title="Edit analisis">✏️</button>'
+    + '</div><div id="aiWeeklyBody">' + aiRenderBody() + '</div></div>';
 }
 function kpi(lb, vl, sb){ return '<div class="statcard'+(lb==='Amount Spent'||lb==='Results'?' accent':'')+'"><div class="lb">'+lb+'</div><div class="vl">'+vl+'</div><div class="sb">'+sb+'</div></div>'; }
 function budgetHealthHtml(fin, T, d){
@@ -830,7 +928,8 @@ async function exportPdf(){
     };
     const resp = await fetch('/api/meta/pdf', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ context: ctx, data: dashData })
+      // analysis: content SAMA dgn dashboard (ONE SOURCE OF TRUTH) — PDF tak generate semula
+      body: JSON.stringify({ context: Object.assign({analysis: aiAnalysis}, ctx), data: dashData })
     });
     if (!resp.ok){
       let msg='Unable to generate the PDF report. Please try again.';

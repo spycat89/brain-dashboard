@@ -376,59 +376,23 @@ def top_ads_rows(d):
     return out or "<tr><td colspan='6' class='na'>Tiada data ad.</td></tr>"
 
 
-def ai_sections(d):
-    """Analisis mingguan — bahasa santai Malaysia (bukan skema/Indonesia)."""
-    C = totals((d.get("insights") or {}).get("data", []))
-    P = totals((d.get("prev_insights") or {}).get("data", []))
-    ads = (d.get("ads_insights") or {}).get("data", []) or []
-    facts, obs, concl, take = [], [], [], []
-    facts.append("%d ad aktif minggu ni." % len(ads))
-    facts.append("Belanja iklan RM%.2f." % C["spend"])
-    facts.append("%s orang hantar mesej (WhatsApp)." % fmt_n(C["results"]))
-    facts.append("Iklan nampak kat %s orang, %s kali papar." % (fmt_n(C["reach"]), fmt_n(C["impr"])))
-    ad_res = [{"name": r.get("ad_name"), "res": res_of(r), "spend": float(r.get("spend") or 0)}
-              for r in ads]
-    ad_res.sort(key=lambda x: -x["res"])
-    if len(ad_res) > 1 and ad_res[0] and ad_res[0]["res"] > 0:
-        tot = sum(a["res"] for a in ad_res) or 1
-        share = ad_res[0]["res"] / tot * 100
-        if share > 50:
-            obs.append("Video \"%s\" bawa paling banyak mesej (%.0f%% dari total)."
-                       % (ad_res[0]["name"], share))
-            concl.append("Hasil iklan tertumpu kat video tu — yang lain macam slow sikit.")
-    chg = delta_pct(C["results"], P["results"])
-    if chg is not None and abs(chg) >= 5:
-        obs.append("Mesej masuk %s %.0f%% berbanding minggu lepas."
-                   % ("naik" if chg > 0 else "turun sikit", abs(chg)))
-    cpr = C["spend"] / C["results"] if C["results"] else 0
-    pcpr = P["spend"] / P["results"] if P["results"] else 0
-    if cpr and pcpr:
-        chgc = delta_pct(cpr, pcpr)
-        if chgc is not None and abs(chgc) >= 5:
-            obs.append("Kos per mesej %s — RM%.2f (minggu lepas RM%.2f)."
-                       % ("naik" if chgc > 0 else "murah sikit", cpr, pcpr))
-    if not concl:
-        concl.append("Minggu ni jalan macam biasa, takde perubahan besar.")
-    if chg is not None:
-        take.append("Mesej masuk %s vs minggu lepas%s."
-                    % ("naik" if chg >= 0 else "turun",
-                       (" (%.0f%%)" % abs(chg)) if abs(chg) >= 5 else ""))
-    if cpr and pcpr and abs(delta_pct(cpr, pcpr) or 0) >= 5:
-        take.append("Kos per mesej %s — RM%.2f."
-                    % ("makin murah" if cpr < pcpr else "naik sikit", cpr))
-    if len(ad_res) > 1 and ad_res[0] and ad_res[0]["res"] > 0:
-        s = ad_res[0]["res"] / (sum(a["res"] for a in ad_res) or 1) * 100
-        if s > 50:
-            take.append("Satu video je yang bawa majoriti mesej (%.0f%%)." % s)
-    if not take:
-        take.append("Kempen jalan seperti biasa minggu ni.")
-
-    def ul(t, items):
-        return ("<div class='aihead'>%s</div><ul class='ailist'>%s</ul>" % (
-            t, "".join("<li>%s</li>" % esc(x) for x in items))) if items else ""
-    # SYOR dibuang dari PDF (Requirement 5) — kekal FAKTA/PEMERHATIAN/KESIMPULAN/POIN PENTING
-    return ul("FAKTA", facts) + ul("PEMERHATIAN", obs) + ul("KESIMPULAN", concl) \
-        + ul("POIN PENTING", take)
+def analysis_html(analysis):
+    """Render KESIMPULAN IKLAN daripada aiWeeklyAnalysis (SINGLE SOURCE OF TRUTH).
+    Content dijana SEKALI di dashboard (JS buildWeeklyAnalysis) atau diedit manual.
+    PDF TIDAK generate/paraphrase semula — hanya render apa yang dihantar."""
+    if not analysis:
+        return ('<div style="font-size:9pt;color:#9ca3af;padding:6px 0">'
+                'Analisis belum tersedia. Buka dashboard Meta Ads untuk jana analisis.</div>')
+    def ul(title, items):
+        items = [x for x in (items or []) if str(x).strip()]
+        if not items:
+            return ""
+        return ("<div class='aihead'>%s</div><ul class='ailist'>%s</ul>"
+                % (esc(title), "".join("<li>%s</li>" % esc(x) for x in items)))
+    return (ul("FAKTA", analysis.get("facts"))
+            + ul("PEMERHATIAN", analysis.get("observations"))
+            + ul("KESIMPULAN", analysis.get("conclusions"))
+            + ul("POIN PENTING", analysis.get("keyTakeaways")))
 
 
 def build_html(ctx, d):
@@ -564,7 +528,7 @@ def build_html(ctx, d):
         budget_note=budget_note,
         hier=hierarchy_rows(d),
         topads=top_ads_rows(d),
-        ai=ai_sections(d),
+        ai=analysis_html(ctx.get("analysis") or d.get("analysis")),
     )
 
 

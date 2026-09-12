@@ -27,3 +27,4 @@ desktop.ini
 renders/
 *.png
 *.pdf
+analysis_store.json
