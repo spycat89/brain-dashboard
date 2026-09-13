@@ -830,7 +830,7 @@ function deliveryAlertsHtml(camps, d){
 /* ===== METRIC MAPPING (Requirement 5) — satu sumber per metric ===== */
 const TREND_METRICS = {
   spend:   { label: 'Amount Spent', axis: v => fmtRM(v),                       tip: v => fmtRM(v) },
-  results: { label: 'Results',      axis: v => Math.round(v).toLocaleString(), tip: v => Math.round(v).toLocaleString() + ' results' },
+  results: { label: 'Results',      axis: v => Math.round(v).toLocaleString(), tip: v => Math.round(v).toLocaleString() },
   impr:    { label: 'Impressions',  axis: v => Math.round(v).toLocaleString(), tip: v => Math.round(v).toLocaleString() },
   reach:   { label: 'Reach',        axis: v => Math.round(v).toLocaleString(), tip: v => Math.round(v).toLocaleString() },
   cpm:     { label: 'CPM',          axis: v => fmtRM(v),                       tip: v => fmtRM(v) },
@@ -906,7 +906,7 @@ function drawTrend(d){
     const hh= v>0 ? Math.max(v/maxV*ih, 2) : 0;
     if (hh>0) svg.appendChild(mk('rect',{x:bx,y:padT+ih-hh,width:bw,height:hh,fill:'#f97316',rx:3,opacity:.9}));
     const tx=mk('text',{x:cx,y:H-7,'text-anchor':'middle','font-size':8.5,fill:'#9ca3af'});tx.textContent=(x.date_start||'').slice(5);svg.appendChild(tx);
-    const vl=mk('text',{x:cx,y:padT+ih-hh-4,'text-anchor':'middle','font-size':8,fill:'#6b7280'});vl.textContent=MM.tip(v);svg.appendChild(vl);
+    const vl=mk('text',{x:cx,y:padT+ih-hh-4,'text-anchor':'middle','font-size':8.5,'font-weight':'700',fill:'#4b5563'});vl.textContent=MM.tip(v);svg.appendChild(vl);
   });
   if(daily.length>1){let pl='';daily.forEach((x,i)=>{const v=trendMetricValue(x,metric),cx=padL+i*step;pl+=(i?',':'')+cx+','+(padT+ih-(v/maxV)*ih);});svg.appendChild(mk('polyline',{points:pl,fill:'none',stroke:'#c2410c','stroke-width':1.4}));}
   const cap=mk('text',{x:padL,y:11,'font-size':9.5,fill:'#6b7280'});cap.textContent=MM.label;svg.appendChild(cap);
