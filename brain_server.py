@@ -154,7 +154,10 @@ class Handler(BaseHTTPRequestHandler):
                 for a in accs or []:
                     out.append({"id": a.get("id"), "name": a.get("name"),
                                 "currency": a.get("currency"),
-                                "status": a.get("accountStatus")})
+                                "status": a.get("accountStatus"),
+                                "timezone": a.get("timezoneName"),
+                                "business": a.get("businessName"),
+                                "tz_offset": a.get("timezoneOffsetHoursUtc")})
                 out.sort(key=lambda x: (x.get("name") or "").lower())
                 self._send(200, json.dumps({"accounts": out, "default": z.AD_ACCOUNT_ID,
                                              "default_name": "JFR Auto Ad"}))

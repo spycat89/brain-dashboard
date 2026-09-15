@@ -524,6 +524,16 @@ function renderDash(d){
   h += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">';
   h += '<div style="font-size:13px;font-weight:700;color:var(--accent)">'+esc(metaAcctName)+'</div>';
   h += '<span style="color:var(--faint);font-size:11.5px">'+metaFrom+' → '+metaTo+'</span>';
+  // ===== TIMEZONE GUARD — elak salah banding dgn Ads Manager =====
+  const tzInfo = metaAccounts.find(a=>a.id===metaAcct)||{};
+  const tz = tzInfo.timezone||'';
+  if (tz){
+    const isKL = (tz.indexOf('Kuala_Lumpur')>=0);
+    h += '<div style="flex-basis:100%;margin:2px 0 8px;padding:6px 10px;border-radius:6px;font-size:11.5px;line-height:1.45;'
+       + (isKL ? 'background:#f3f4f6;color:#4b5563;border:1px solid #e5e7eb">🕐 Timezone akaun: <b>'+esc(tz)+'</b>'
+               : 'background:#fef3c7;color:#92400e;border:1px solid #fcd34d">⚠️ <b>Timezone akaun BUKAN waktu Malaysia</b> — '+esc(tz)+'. Boundary hari ikut timezone akaun, jadi angka harian boleh berbeza dari Ads Manager kalau browser u set ke KL. Semak dulu sebelum banding atau report.')
+       + '</div>';
+  }
   if (d.prev_from) h += '<span style="color:var(--faint);font-size:11px">(vs '+d.prev_from+' → '+d.prev_to+')</span>';
   h += '<div class="grow" style="flex:1"></div>';
   h += '<span style="font-size:11.5px;color:var(--faint)">baki akaun '+fmtRM(fin.balance)+' · '+(fin.currency||'MYR')+'</span>';
